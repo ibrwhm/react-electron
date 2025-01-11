@@ -1,7 +1,7 @@
 {
   "name": "telegram-manager",
   "productName": "Telegram Manager",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Telegram Manager",
   "author": {
     "name": "Rio",
@@ -86,7 +86,7 @@
       "owner": "ibrwhm",
       "repo": "react-electron",
       "private": true,
-      "token": "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",
+      "token": "ghp_11A3VUPWA0B63xXZd4r0np_s2B12muGP9uh4TukGpV9cbJ6zpyiz6PdiqY1GhKLnJYIWSFBNHMJpt7VMjT",
       "releaseType": "release"
     },
     "directories": {
@@ -99,26 +99,32 @@
       "splash.html",
       "src/**/*",
       "build/**/*",
-      ".env"
+      ".env",
+      "dist/**/*"
     ],
     "extraResources": [
       {
         "from": "dist",
-        "to": "dist",
-        "filter": [
-          "**/*"
-        ]
+        "to": "dist"
       },
       {
         "from": "build",
-        "to": "build",
-        "filter": [
-          "icon.ico"
-        ]
+        "to": "build"
+      },
+      {
+        "from": "preload.js",
+        "to": "preload.js"
+      },
+      {
+        "from": "splash.html",
+        "to": "splash.html"
+      },
+      {
+        "from": ".env",
+        "to": ".env"
       }
     ],
     "asarUnpack": [
-      "src/assets/**/*",
       "node_modules/sqlite3/**/*",
       "node_modules/electron-store/**/*",
       "**/node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe",

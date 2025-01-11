@@ -3,117 +3,28 @@ const { autoUpdater } = require("electron-updater");
 const path = require("path");
 const log = require("electron-log");
 const fs = require("fs");
+const dotenv = require('dotenv');
 
 log.transports.file.level = "debug";
 log.transports.console.level = "debug";
 
-// Güncelleme yapılandırması
-const setupAutoUpdater = () => {
-  autoUpdater.logger = log;
-  autoUpdater.autoDownload = true;
-  autoUpdater.allowDowngrade = true;
-  autoUpdater.requestHeaders = {
-    'Authorization': 'Bearer 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'
-  };
-  autoUpdater.setFeedURL({
-    provider: 'github',
-    owner: 'ibrwhm',
-    repo: 'react-electron',
-    private: true,
-  });
-
-  // Güncelleme event'leri
-  autoUpdater.on("checking-for-update", () => {
-    log.debug("Güncellemeler kontrol ediliyor...");
-    if (!splashWindow?.isDestroyed()) {
-      splashWindow?.webContents.send("update-status", "Güncellemeler kontrol ediliyor...");
-    }
-  });
-
-  autoUpdater.on("update-available", (info) => {
-    log.debug("Güncelleme mevcut:", info);
-    if (!splashWindow?.isDestroyed()) {
-      splashWindow?.webContents.send("update-status", `Yeni versiyon bulundu: ${info.version}. İndiriliyor...`);
-    }
-  });
-
-  autoUpdater.on("update-not-available", () => {
-    log.debug("Güncelleme mevcut değil");
-    if (!splashWindow?.isDestroyed()) {
-      splashWindow?.webContents.send("update-status", "Uygulama başlatılıyor...");
-      setTimeout(() => {
-        if (!splashWindow?.isDestroyed()) {
-          splashWindow?.destroy();
-        }
-        if (!mainWindow?.isDestroyed()) {
-          mainWindow?.show();
-        }
-      }, 2000);
-    }
-  });
-
-  autoUpdater.on("error", (err) => {
-    log.error("Güncelleme hatası:", err);
-    if (!splashWindow?.isDestroyed()) {
-      splashWindow?.webContents.send("update-status", "Güncelleme hatası. Uygulama başlatılıyor...");
-      setTimeout(() => {
-        if (!splashWindow?.isDestroyed()) {
-          splashWindow?.destroy();
-        }
-        if (!mainWindow?.isDestroyed()) {
-          mainWindow?.show();
-        }
-      }, 2000);
-    }
-  });
-
-  autoUpdater.on("download-progress", (progressObj) => {
-    let message = `İndiriliyor... ${progressObj.percent.toFixed(2)}%`;
-    log.debug(message);
-    if (!splashWindow?.isDestroyed()) {
-      splashWindow?.webContents.send("update-progress", progressObj.percent);
-      splashWindow?.webContents.send("update-status", message);
-    }
-  });
-
-  autoUpdater.on("update-downloaded", () => {
-    log.debug("Güncelleme indirildi");
-    if (!splashWindow?.isDestroyed()) {
-      splashWindow?.webContents.send("update-status", "Güncelleme indirildi. Yeniden başlatılıyor...");
-      setTimeout(() => {
-        autoUpdater.quitAndInstall(false, true);
-      }, 3000);
-    }
-  });
-};
-
 const isDev = process.env.NODE_ENV === "development";
 const os = require("os");
 
-const APP_PATH = app.getAppPath();
-const RESOURCES_PATH = process.resourcesPath;
-
-const getAssetPath = (...paths) => {
-  if (isDev) {
-    return path.join(__dirname, 'src', 'assets', ...paths);
-  }
-  return path.join(process.resourcesPath, 'app.asar.unpacked', 'assets', ...paths);
-};
-
-const getDistPath = (...paths) => {
-  if (isDev) {
-    return path.join(__dirname, 'dist', ...paths);
-  }
-  return path.join(RESOURCES_PATH, 'dist', ...paths);
-};
+const envPath = isDev ? '.env' : path.join(process.resourcesPath, '.env');
+dotenv.config({ path: envPath });
 
 const PRELOAD_PATH = isDev
   ? path.join(__dirname, "preload.js")
-  : path.join(APP_PATH, "preload.js");
+  : path.join(process.resourcesPath, "preload.js");
+
 const SPLASH_PATH = isDev
   ? path.join(__dirname, "splash.html")
-  : path.join(APP_PATH, "splash.html");
-const ICON_PATH = getAssetPath("icon.ico");
+  : path.join(process.resourcesPath, "splash.html");
+
+const ICON_PATH = isDev
+  ? path.join(__dirname, "src", "assets", "icon.ico")
+  : path.join(process.resourcesPath, "dist", "assets", "icon.ico");
 
 let mainWindow = null;
 let tray = null;
@@ -140,11 +51,10 @@ function createSplashWindow() {
       log.error("Error loading splash window:", err);
     });
 
-    splashWindow.setAlwaysOnTop(true);
     return splashWindow;
   } catch (error) {
     log.error("Error in createSplashWindow:", error);
-    app.quit();
+    return null;
   }
 }
 
@@ -167,25 +77,20 @@ function createWindow() {
       backgroundColor: '#ffffff',
     });
 
-    mainWindow.webContents.once('did-start-loading', () => {
-      log.debug('Main window started loading');
-    });
-
-    mainWindow.webContents.once('did-finish-load', () => {
-      log.debug('Main window finished loading');
-      if (splashWindow) {
-        splashWindow.destroy();
-      }
-      mainWindow.show();
-    });
-
     if (isDev) {
       mainWindow.loadURL("http://localhost:5173");
       mainWindow.webContents.openDevTools();
     } else {
       try {
-        const indexPath = getDistPath('index.html');
+        const indexPath = path.join(process.resourcesPath, 'dist', 'index.html');
         log.debug("Loading production index from:", indexPath);
+
+        // Dosyanın varlığını kontrol et
+        if (!fs.existsSync(indexPath)) {
+          log.error("index.html not found at:", indexPath);
+          throw new Error("index.html not found");
+        }
+
         mainWindow.loadFile(indexPath).catch((err) => {
           log.error("Error loading index.html:", err);
           mainWindow.webContents.openDevTools();
@@ -196,14 +101,10 @@ function createWindow() {
       }
     }
 
-    mainWindow.on("closed", () => {
-      mainWindow = null;
-    });
-
     return mainWindow;
   } catch (error) {
     log.error("Error in createWindow:", error);
-    app.quit();
+    return null;
   }
 }
 
@@ -215,7 +116,16 @@ function createTray() {
     }
 
     log.debug("Creating tray with icon:", ICON_PATH);
-    tray = new Tray(ICON_PATH);
+    try {
+      console.log("[debug] Icon path:", ICON_PATH);
+      console.log("[debug] Icon exists:", fs.existsSync(ICON_PATH));
+
+      tray = new Tray(ICON_PATH);
+      console.log("[debug] Tray created successfully");
+    } catch (error) {
+      console.error("[error] Failed to create tray:", error);
+      // Tray olmadan da devam et
+    }
 
     const contextMenu = Menu.buildFromTemplate([
       {
@@ -826,14 +736,90 @@ app.whenReady().then(async () => {
   try {
     log.debug("App is ready, initializing...");
 
-    // Güncelleme sistemini kur
-    setupAutoUpdater();
-
-    // Ana pencereyi oluştur
-    mainWindow = createWindow();
-
     // Splash ekranını oluştur
     splashWindow = createSplashWindow();
+    if (!splashWindow) {
+      throw new Error("Failed to create splash window");
+    }
+
+    // Ana pencereyi arka planda oluştur
+    mainWindow = createWindow();
+    if (!mainWindow) {
+      throw new Error("Failed to create main window");
+    }
+
+    // Ana pencere yüklendiğinde
+    mainWindow.webContents.on('did-finish-load', async () => {
+      log.debug('Main window finished loading');
+
+      // Güncelleme kontrolü
+      if (!isDev) {
+        autoUpdater.autoDownload = true;
+        autoUpdater.allowDowngrade = true;
+
+        autoUpdater.on('checking-for-update', () => {
+          if (splashWindow) {
+            splashWindow.webContents.send('update-status', 'Güncellemeler kontrol ediliyor...');
+          }
+        });
+
+        autoUpdater.on('update-available', (info) => {
+          if (splashWindow) {
+            splashWindow.webContents.send('update-status', `Yeni sürüm bulundu: ${info.version}`);
+          }
+        });
+
+        autoUpdater.on('update-not-available', () => {
+          if (splashWindow) {
+            splashWindow.webContents.send('update-status', 'Uygulama güncel');
+            setTimeout(() => {
+              splashWindow.destroy();
+              if (mainWindow) mainWindow.show();
+            }, 1000);
+          }
+        });
+
+        autoUpdater.on('error', (err) => {
+          log.error('Güncelleme hatası:', err);
+          if (splashWindow) {
+            splashWindow.webContents.send('update-status', 'Güncelleme hatası');
+            setTimeout(() => {
+              splashWindow.destroy();
+              if (mainWindow) mainWindow.show();
+            }, 1000);
+          }
+        });
+
+        autoUpdater.on('download-progress', (progressObj) => {
+          if (splashWindow) {
+            splashWindow.webContents.send('update-status', `İndiriliyor... ${progressObj.percent.toFixed(2)}%`);
+          }
+        });
+
+        autoUpdater.on('update-downloaded', () => {
+          if (splashWindow) {
+            splashWindow.webContents.send('update-status', 'Güncelleme hazır, yeniden başlatılıyor...');
+            setTimeout(() => {
+              autoUpdater.quitAndInstall();
+            }, 1000);
+          }
+        });
+
+        try {
+          await autoUpdater.checkForUpdates();
+        } catch (updateError) {
+          log.error('Güncelleme kontrolü hatası:', updateError);
+          if (splashWindow) splashWindow.destroy();
+          if (mainWindow) mainWindow.show();
+        }
+      } else {
+        // Geliştirme modunda splash ekranını kısa süre göster
+        setTimeout(() => {
+          if (splashWindow) splashWindow.destroy();
+          if (mainWindow) mainWindow.show();
+        }, 1000);
+      }
+    });
 
     // Database bağlantısı
     connectDB().catch((dbError) => {
@@ -841,41 +827,18 @@ app.whenReady().then(async () => {
     });
 
     setupIpcHandlers();
-    createTray();
 
-    if (!isDev) {
-      setTimeout(async () => {
-        try {
-          log.debug("Checking for updates...");
-          await autoUpdater.checkForUpdates();
-        } catch (err) {
-          log.error("Güncelleme kontrolü hatası:", err);
-          if (!splashWindow?.isDestroyed()) {
-            splashWindow?.webContents.send("update-status", "Güncelleme kontrolü başarısız. Uygulama başlatılıyor...");
-            setTimeout(() => {
-              if (!splashWindow?.isDestroyed()) {
-                splashWindow?.destroy();
-              }
-              if (!mainWindow?.isDestroyed()) {
-                mainWindow?.show();
-              }
-            }, 2000);
-          }
-        }
-      }, 3000);
-    } else {
-      setTimeout(() => {
-        if (!splashWindow?.isDestroyed()) {
-          splashWindow?.destroy();
-        }
-        if (!mainWindow?.isDestroyed()) {
-          mainWindow?.show();
-        }
-      }, 2000);
+    // Tray'i oluştur
+    try {
+      createTray();
+    } catch (trayError) {
+      log.error("Tray creation error:", trayError);
     }
+
   } catch (error) {
     log.error("Error in app.whenReady:", error);
-    app.quit();
+    if (splashWindow) splashWindow.destroy();
+    if (mainWindow) mainWindow.show();
   }
 });
 

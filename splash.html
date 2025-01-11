@@ -4,67 +4,134 @@
 <head>
     <title>Telegram Manager</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        }
+
         body {
             margin: 0;
             padding: 0;
-            background: #1a1b1e;
             display: flex;
-            flex-direction: column;
-            align-items: center;
             justify-content: center;
-            height: 100vh;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-            color: white;
-            user-select: none;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0088cc, #005580);
+            overflow: hidden;
+        }
+
+        .splash-container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            animation: fadeIn 0.5s ease-out;
+            max-width: 400px;
+            width: 90%;
         }
 
         .logo {
             width: 120px;
             height: 120px;
             margin-bottom: 20px;
+            animation: pulse 2s infinite;
+            filter: drop-shadow(0 0 8px rgba(0, 136, 204, 0.5));
+        }
+
+        .title {
+            color: white;
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
         .status {
-            font-size: 14px;
-            color: #a1a1aa;
-            margin-top: 15px;
-            text-align: center;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 16px;
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
         }
 
         .progress-bar {
-            width: 200px;
+            width: 100%;
             height: 4px;
-            background: #27272a;
+            background: rgba(255, 255, 255, 0.2);
             border-radius: 2px;
+            margin-top: 20px;
             overflow: hidden;
-            margin-top: 10px;
+            position: relative;
         }
 
         .progress {
-            width: 0%;
+            position: absolute;
+            left: -100%;
+            width: 100%;
             height: 100%;
-            background: #3b82f6;
-            transition: width 0.3s ease;
+            background: #fff;
+            animation: progress 1.5s ease-in-out infinite;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        @keyframes progress {
+            0% {
+                left: -100%;
+            }
+
+            100% {
+                left: 100%;
+            }
         }
     </style>
 </head>
 
 <body>
-    <img src="src/assets/icon.ico" alt="Logo" class="logo">
-    <div class="status" id="status">Başlatılıyor...</div>
-    <div class="progress-bar">
-        <div class="progress" id="progress"></div>
+    <div class="splash-container">
+        <img src="build/icon.ico" alt="Logo" class="logo">
+        <h1 class="title">Telegram Manager</h1>
+        <div id="status" class="status">Yükleniyor...</div>
+        <div class="progress-bar">
+            <div class="progress"></div>
+        </div>
     </div>
-
     <script>
         const { ipcRenderer } = require('electron');
+        const status = document.getElementById('status');
 
-        ipcRenderer.on('update-status', (_, message) => {
-            document.getElementById('status').textContent = message;
-        });
-
-        ipcRenderer.on('update-progress', (_, progress) => {
-            document.getElementById('progress').style.width = `${progress}%`;
+        ipcRenderer.on('update-status', (event, message) => {
+            status.textContent = message;
         });
     </script>
 </body>
