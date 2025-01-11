@@ -30,7 +30,7 @@ const getAssetPath = (...paths) => {
   if (isDev) {
     return path.join(__dirname, 'src', 'assets', ...paths);
   }
-  return path.join(RESOURCES_PATH, 'build', ...paths);
+  return path.join(RESOURCES_PATH, 'assets', ...paths);
 };
 
 const getDistPath = (...paths) => {
@@ -100,8 +100,15 @@ function createWindow() {
       backgroundColor: '#ffffff',
     });
 
-    mainWindow.once('ready-to-show', () => {
-      splashWindow?.destroy();
+    mainWindow.webContents.once('did-start-loading', () => {
+      log.debug('Main window started loading');
+    });
+
+    mainWindow.webContents.once('did-finish-load', () => {
+      log.debug('Main window finished loading');
+      if (splashWindow) {
+        splashWindow.destroy();
+      }
       mainWindow.show();
     });
 
@@ -807,16 +814,14 @@ autoUpdater.on("update-downloaded", () => {
 app.whenReady().then(async () => {
   try {
     log.debug("App is ready, initializing...");
-    splashWindow = createSplashWindow();
+
     mainWindow = createWindow();
 
-    try {
-      log.debug("Connecting to database...");
-      await connectDB();
-      log.debug("Database connected successfully");
-    } catch (dbError) {
+    splashWindow = createSplashWindow();
+
+    connectDB().catch((dbError) => {
       log.error("Database connection error:", dbError);
-    }
+    });
 
     setupIpcHandlers();
     createTray();
@@ -830,14 +835,12 @@ app.whenReady().then(async () => {
           splashWindow?.webContents.send("update-status", "Güncelleme kontrolü başarısız. Uygulama başlatılıyor...");
           setTimeout(() => {
             splashWindow?.destroy();
-            mainWindow?.show();
           }, 1000);
         }
       }, 1000);
     } else {
       setTimeout(() => {
         splashWindow?.destroy();
-        mainWindow?.show();
       }, 1000);
     }
   } catch (error) {
