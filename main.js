@@ -10,7 +10,7 @@ log.transports.console.level = "debug";
 // Güncelleme ayarları
 autoUpdater.logger = log;
 autoUpdater.requestHeaders = {
-  'Authorization': 'Bearer ghp_your_github_token_here'
+  'Authorization': 'Bearer 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'
 };
 autoUpdater.setFeedURL({
   provider: 'github',
