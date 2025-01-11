@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/ibrwhm/tg-app.git"
+    "url": "https://github.com/ibrwhm/react-electron.git"
   },
   "main": "main.js",
   "license": "MIT",
@@ -83,7 +83,7 @@
     "publish": {
       "provider": "github",
       "owner": "ibrwhm",
-      "repo": "tg-app",
+      "repo": "react-electron",
       "private": true,
       "token": "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"
     },

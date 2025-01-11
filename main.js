@@ -7,7 +7,6 @@ const fs = require("fs");
 log.transports.file.level = "debug";
 log.transports.console.level = "debug";
 
-// Güncelleme ayarları
 autoUpdater.logger = log;
 autoUpdater.requestHeaders = {
   'Authorization': 'Bearer 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'
@@ -15,7 +14,7 @@ autoUpdater.requestHeaders = {
 autoUpdater.setFeedURL({
   provider: 'github',
   owner: 'ibrwhm',
-  repo: 'tg-app',
+  repo: 'react-electron',
   private: true,
 });
 
@@ -25,7 +24,6 @@ const os = require("os");
 const APP_PATH = app.getAppPath();
 const RESOURCES_PATH = process.resourcesPath;
 
-// Dosya yollarını düzgün şekilde oluşturalım
 const getAssetPath = (...paths) => {
   if (isDev) {
     return path.join(__dirname, 'src', 'assets', ...paths);
@@ -40,7 +38,6 @@ const getDistPath = (...paths) => {
   return path.join(RESOURCES_PATH, 'dist', ...paths);
 };
 
-// Yolları güncelleyelim
 const PRELOAD_PATH = isDev
   ? path.join(__dirname, "preload.js")
   : path.join(APP_PATH, "preload.js");
@@ -48,12 +45,6 @@ const SPLASH_PATH = isDev
   ? path.join(__dirname, "splash.html")
   : path.join(APP_PATH, "splash.html");
 const ICON_PATH = getAssetPath("icon.ico");
-
-log.debug('App path:', APP_PATH);
-log.debug('Resources path:', RESOURCES_PATH);
-log.debug('Preload path:', PRELOAD_PATH);
-log.debug('Splash path:', SPLASH_PATH);
-log.debug('Icon path:', ICON_PATH);
 
 let mainWindow = null;
 let tray = null;
