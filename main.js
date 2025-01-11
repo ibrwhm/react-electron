@@ -30,7 +30,7 @@ const getAssetPath = (...paths) => {
   if (isDev) {
     return path.join(__dirname, 'src', 'assets', ...paths);
   }
-  return path.join(RESOURCES_PATH, 'assets', ...paths);
+  return path.join(process.resourcesPath, 'app.asar.unpacked', 'assets', ...paths);
 };
 
 const getDistPath = (...paths) => {

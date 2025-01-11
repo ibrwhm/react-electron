@@ -1,7 +1,7 @@
 {
   "name": "telegram-manager",
   "productName": "Telegram Manager",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Telegram Manager",
   "author": {
     "name": "Rio",
@@ -97,7 +97,8 @@
       "preload.js",
       "splash.html",
       "src/**/*",
-      "build/**/*"
+      "build/**/*",
+      ".env"
     ],
     "extraResources": [
       {
@@ -113,24 +114,10 @@
         "filter": [
           "icon.ico"
         ]
-      },
-      {
-        "from": "src/assets",
-        "to": "assets",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "public",
-        "to": ".",
-        "filter": [
-          "**/*"
-        ]
       }
     ],
-    "asar": true,
     "asarUnpack": [
+      "src/assets/**/*",
       "node_modules/sqlite3/**/*",
       "node_modules/electron-store/**/*",
       "**/node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe",
