@@ -86,7 +86,7 @@
       "owner": "ibrwhm",
       "repo": "react-electron",
       "private": true,
-      "token": "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",
+      "token": "Bearer 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",
       "releaseType": "release"
     },
     "directories": {
