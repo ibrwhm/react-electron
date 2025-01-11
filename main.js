@@ -9,7 +9,7 @@ log.transports.console.level = "debug";
 
 autoUpdater.logger = log;
 autoUpdater.requestHeaders = {
-  'Authorization': 'Bearer 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'
+  'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`
 };
 autoUpdater.setFeedURL({
   provider: 'github',
