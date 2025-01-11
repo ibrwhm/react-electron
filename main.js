@@ -8,6 +8,7 @@ log.transports.file.level = "debug";
 log.transports.console.level = "debug";
 
 autoUpdater.logger = log;
+autoUpdater.autoDownload = false;
 autoUpdater.requestHeaders = {
   'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`
 };
@@ -95,6 +96,12 @@ function createWindow() {
         preload: PRELOAD_PATH,
         webSecurity: false,
       },
+      backgroundColor: '#ffffff',
+    });
+
+    mainWindow.once('ready-to-show', () => {
+      splashWindow?.destroy();
+      mainWindow.show();
     });
 
     if (isDev) {
@@ -104,16 +111,12 @@ function createWindow() {
       try {
         const indexPath = getDistPath('index.html');
         log.debug("Loading production index from:", indexPath);
-        log.debug("Directory contents:", fs.readdirSync(path.dirname(indexPath)));
-        mainWindow.webContents.openDevTools();
         mainWindow.loadFile(indexPath).catch((err) => {
           log.error("Error loading index.html:", err);
-          log.error("Current directory contents:", fs.readdirSync(path.dirname(indexPath)));
           mainWindow.webContents.openDevTools();
         });
       } catch (err) {
         log.error("Error in production load:", err);
-        log.error("App path contents:", fs.readdirSync(APP_PATH));
         mainWindow.webContents.openDevTools();
       }
     }
@@ -813,9 +816,7 @@ app.whenReady().then(async () => {
   try {
     log.debug("App is ready, initializing...");
     splashWindow = createSplashWindow();
-
     mainWindow = createWindow();
-    mainWindow.hide();
 
     try {
       log.debug("Connecting to database...");
@@ -829,20 +830,23 @@ app.whenReady().then(async () => {
     createTray();
 
     if (!isDev) {
-      setTimeout(() => {
+      setTimeout(async () => {
         try {
-          autoUpdater.checkForUpdates();
+          await autoUpdater.checkForUpdates();
         } catch (err) {
           log.error("Güncelleme kontrolü hatası:", err);
-          splashWindow?.destroy();
-          mainWindow?.show();
+          splashWindow?.webContents.send("update-status", "Güncelleme kontrolü başarısız. Uygulama başlatılıyor...");
+          setTimeout(() => {
+            splashWindow?.destroy();
+            mainWindow?.show();
+          }, 1000);
         }
       }, 1000);
     } else {
       setTimeout(() => {
         splashWindow?.destroy();
         mainWindow?.show();
-      }, 2000);
+      }, 1000);
     }
   } catch (error) {
     log.error("Error in app.whenReady:", error);
