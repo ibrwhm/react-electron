@@ -1,7 +1,7 @@
 {
   "name": "telegram-manager",
   "productName": "Telegram Manager",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Telegram Manager",
   "author": {
     "name": "Rio",
@@ -86,7 +86,7 @@
       "owner": "ibrwhm",
       "repo": "react-electron",
       "private": true,
-      "token": "Bearer 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",
+      "token": "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",
       "releaseType": "release"
     },
     "directories": {
