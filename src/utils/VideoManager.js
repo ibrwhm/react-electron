@@ -1,0 +1,482 @@
+const { app } = require("electron");
+const path = require("path");
+const fs = require("fs-extra");
+const ffmpeg = require("fluent-ffmpeg");
+const ffmpegPath = require("@ffmpeg-installer/ffmpeg").path;
+ffmpeg.setFfmpegPath(ffmpegPath);
+
+class VideoManager {
+  constructor() {
+    this.videoDir = path.join(app.getPath("userData"), "uploads");
+    this.storeDir = path.join(app.getPath("userData"), "store");
+    this.compressedDir = path.join(app.getPath("userData"), "compressed");
+    this.store = null;
+    this.schedulerStatus = false;
+    this.message = "";
+    this.defaultTimes = ["09:00", "12:00", "15:00", "18:00", "21:00", "23:00"];
+
+    this.initStore();
+    this.ensureDirectories();
+  }
+
+  async initStore() {
+    if (this.store) return;
+
+    try {
+      const { default: Store } = await import("electron-store");
+      this.store = new Store({
+        name: "video-manager",
+        encryptionKey: "krishnay",
+        cwd: this.storeDir,
+        defaults: {
+          videos: [],
+          sendTimes: this.defaultTimes,
+          schedulerStatus: false,
+          message: "",
+          telegramBot: {
+            token: "",
+            isEnabled: false,
+            lastError: "",
+            lastSuccess: "",
+          },
+        },
+      });
+
+      const currentTimes = this.store.get("sendTimes");
+      const currentTelegramBot = this.store.get("telegramBot");
+
+      if (!currentTimes) {
+        this.store.set("sendTimes", this.defaultTimes);
+      }
+
+      if (!currentTelegramBot) {
+        this.store.set("telegramBot", {
+          token: "",
+          isEnabled: false,
+          lastError: "",
+          lastSuccess: "",
+        });
+      }
+    } catch (error) {
+      console.error("Store initialization error:", error);
+      throw error;
+    }
+  }
+
+  async ensureStore() {
+    if (!this.store) {
+      await this.initStore();
+    }
+  }
+
+  async ensureDirectories() {
+    await fs.ensureDir(this.videoDir);
+    await fs.ensureDir(this.storeDir);
+    await fs.ensureDir(this.compressedDir);
+  }
+
+  async getTimes() {
+    await this.ensureStore();
+    return this.store.get("sendTimes") || [];
+  }
+
+  async saveTimes(newTimes) {
+    await this.ensureStore();
+    try {
+      const sortedTimes = (
+        Array.isArray(newTimes) ? newTimes : [newTimes]
+      ).sort((a, b) => {
+        const [aHours, aMinutes] = a.split(":").map(Number);
+        const [bHours, bMinutes] = b.split(":").map(Number);
+        return aHours * 60 + aMinutes - (bHours * 60 + bMinutes);
+      });
+
+      this.store.set("sendTimes", sortedTimes);
+      return sortedTimes;
+    } catch (error) {
+      console.error("Error saving times:", error);
+      throw error;
+    }
+  }
+
+  async getAllVideos() {
+    try {
+      const videos = this.store.get("videos", []);
+      return Array.isArray(videos) ? videos : [];
+    } catch (error) {
+      console.error("Error getting videos:", error);
+      return [];
+    }
+  }
+
+  async saveVideo({ filePath, description, channelLink }) {
+    try {
+      if (!channelLink) {
+        throw new Error("Kanal linki gerekli");
+      }
+
+      if (!filePath || typeof filePath !== "string") {
+        throw new Error("Geçerli bir dosya yolu gerekli");
+      }
+
+      if (!fs.existsSync(filePath)) {
+        throw new Error("Dosya bulunamadı: " + filePath);
+      }
+
+      const stats = fs.statSync(filePath);
+      const fileSizeInMB = stats.size / (1024 * 1024);
+
+      let targetPath = path.join(
+        this.videoDir,
+        `${Date.now()}_${path.basename(filePath)}`
+      );
+
+      if (fileSizeInMB > 50) {
+        targetPath = await this.compressVideo(filePath);
+      } else {
+        await fs.promises.copyFile(filePath, targetPath);
+      }
+
+      const videos = this.store.get("videos", []);
+      let channel = videos.find((c) => c.channelLink === channelLink);
+
+      if (!channel) {
+        channel = {
+          _id: Date.now().toString(),
+          channelLink,
+          videos: [],
+        };
+        videos.push(channel);
+      }
+
+      channel.videos.push({
+        _id: Date.now().toString(),
+        filename: path.basename(targetPath),
+        originalPath: filePath,
+        savedPath: targetPath,
+        description: description || "",
+        status: "pending",
+        error: null,
+        sentAt: null,
+        createdAt: new Date().toISOString(),
+        size: fs.statSync(targetPath).size,
+        originalSize: stats.size,
+        compressed: fileSizeInMB > 50,
+      });
+
+      this.store.set("videos", videos);
+      return { success: true };
+    } catch (error) {
+      console.error("Video kaydedilirken hata:", error);
+      throw new Error("Video kaydedilemedi: " + error.message);
+    }
+  }
+
+  async deleteVideo(channelId, videoId) {
+    try {
+      await this.ensureStore();
+      const videos = this.store.get("videos") || [];
+      const channelIndex = videos.findIndex((c) => c._id === channelId);
+
+      if (channelIndex === -1) {
+        throw new Error("Kanal bulunamadı");
+      }
+
+      const videoIndex = videos[channelIndex].videos.findIndex(
+        (v) => v._id === videoId
+      );
+      if (videoIndex === -1) {
+        throw new Error("Video bulunamadı");
+      }
+
+      const video = videos[channelIndex].videos[videoIndex];
+      if (video.savedPath && fs.existsSync(video.savedPath)) {
+        await fs.promises.unlink(video.savedPath);
+      }
+
+      videos[channelIndex].videos.splice(videoIndex, 1);
+
+      if (videos[channelIndex].videos.length === 0) {
+        videos.splice(channelIndex, 1);
+      }
+
+      this.store.set("videos", videos);
+      return { success: true };
+    } catch (error) {
+      console.error("Error deleting video:", error);
+      throw error;
+    }
+  }
+
+  async getSchedulerStatus() {
+    try {
+      return this.store.get("schedulerStatus", false);
+    } catch (error) {
+      console.error("Error getting scheduler status:", error);
+      return false;
+    }
+  }
+
+  async startScheduler() {
+    try {
+      await this.ensureStore();
+      const status = this.store.get("schedulerStatus");
+
+      if (status) {
+        throw new Error("Zamanlayıcı zaten çalışıyor");
+      }
+
+      if (this.schedulerInterval) {
+        clearInterval(this.schedulerInterval);
+        this.schedulerInterval = null;
+      }
+
+      await this.checkAndSendVideos();
+      this.schedulerInterval = setInterval(
+        () => this.checkAndSendVideos(),
+        60000
+      );
+      this.store.set("schedulerStatus", true);
+
+      return true;
+    } catch (error) {
+      console.error("Error starting scheduler:", error);
+      throw error;
+    }
+  }
+
+  async stopScheduler() {
+    try {
+      await this.ensureStore();
+      const status = this.store.get("schedulerStatus");
+
+      if (!status) {
+        throw new Error("Zamanlayıcı zaten durdurulmuş");
+      }
+
+      if (this.schedulerInterval) {
+        clearInterval(this.schedulerInterval);
+        this.schedulerInterval = null;
+      }
+
+      this.store.set("schedulerStatus", false);
+
+      return false;
+    } catch (error) {
+      console.error("Error stopping scheduler:", error);
+      throw error;
+    }
+  }
+
+  async checkAndSendVideos() {
+    try {
+      await this.ensureStore();
+      const now = new Date();
+      const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(
+        now.getMinutes()
+      ).padStart(2, "0")}`;
+      const scheduledTimes = await this.getTimes();
+
+      if (!scheduledTimes.includes(currentTime)) {
+        return;
+      }
+
+      const videos = this.store.get("videos", []);
+      let processedCount = 0;
+
+      for (const channel of videos) {
+        const pendingVideos = channel.videos.filter(
+          (v) => v.status === "pending"
+        );
+
+        if (pendingVideos.length > 0) {
+          const randomVideo =
+            pendingVideos[Math.floor(Math.random() * pendingVideos.length)];
+
+          try {
+            await this.sendToTelegram(channel.channelLink, randomVideo);
+            randomVideo.status = "sent";
+            randomVideo.sentAt = new Date().toISOString();
+            processedCount++;
+          } catch (error) {
+            randomVideo.status = "error";
+            randomVideo.error = error.message;
+          }
+        }
+      }
+
+      if (processedCount > 0) {
+        this.store.set("videos", videos);
+      }
+    } catch (error) {
+      throw new Error("Zamanlayıcı kontrolü yapılırken hata: " + error.message);
+    }
+  }
+
+  async getTelegramSettings() {
+    await this.ensureStore();
+    return (
+      this.store.get("telegramBot") || {
+        token: "",
+        isEnabled: false,
+        lastError: "",
+        lastSuccess: "",
+      }
+    );
+  }
+
+  async saveTelegramSettings(settings) {
+    await this.ensureStore();
+    try {
+      const currentSettings = await this.getTelegramSettings();
+      const newSettings = {
+        ...currentSettings,
+        token: settings.token || currentSettings.token,
+        isEnabled: settings.isEnabled,
+        lastSuccess: settings.isEnabled
+          ? "Bot başarıyla aktifleştirildi"
+          : "Bot durduruldu",
+        lastError: "",
+      };
+
+      this.store.set("telegramBot", newSettings);
+      return newSettings;
+    } catch (error) {
+      const errorSettings = {
+        token: settings.token,
+        isEnabled: false,
+        lastError: error.message,
+        lastSuccess: "",
+      };
+      this.store.set("telegramBot", errorSettings);
+      return errorSettings;
+    }
+  }
+
+  async testTelegramBot(token) {
+    try {
+      const TelegramBot = await import("node-telegram-bot-api");
+      const bot = new TelegramBot.default(token, { polling: false });
+      const me = await bot.getMe();
+      return {
+        success: true,
+        botInfo: me,
+      };
+    } catch (error) {
+      throw new Error("Bot token geçersiz veya bağlantı hatası");
+    }
+  }
+
+  extractChannelId(channelLink) {
+    try {
+      const url = new URL(channelLink);
+      if (url.hostname !== "t.me") {
+        throw new Error("Geçersiz Telegram kanal linki");
+      }
+      return "@" + url.pathname.substring(1);
+    } catch (error) {
+      return channelLink.startsWith("@") ? channelLink : "@" + channelLink;
+    }
+  }
+
+  async sendToTelegram(channelLink, video) {
+    try {
+      await this.ensureStore();
+      const settings = await this.getTelegramSettings();
+      if (!settings.isEnabled || !settings.token) {
+        throw new Error("Telegram bot aktif değil veya token ayarlanmamış");
+      }
+
+      const channelId = this.extractChannelId(channelLink);
+      console.log(channelId);
+
+      if (!fs.existsSync(video.savedPath)) {
+        throw new Error("Video dosyası bulunamadı: " + video.savedPath);
+      }
+
+      let videoPath = video.savedPath;
+      const stats = fs.statSync(videoPath);
+      const fileSizeInMB = stats.size / (1024 * 1024);
+
+      if (fileSizeInMB > 50) {
+        videoPath = await this.compressVideo(videoPath);
+      }
+
+      const TelegramBot = await import("node-telegram-bot-api");
+      if (!this.telegramBot) {
+        this.telegramBot = new TelegramBot.default(settings.token, {
+          polling: false,
+        });
+      }
+
+      const videoStream = fs.createReadStream(videoPath);
+      await this.telegramBot.sendVideo(channelId, videoStream, {
+        caption: video.description || "",
+        contentType: "video/mp4",
+      });
+
+      if (videoPath !== video.savedPath) {
+        fs.unlinkSync(videoPath);
+      }
+
+      settings.lastSuccess = new Date().toISOString();
+      settings.lastError = "";
+      this.store.set("telegramBot", settings);
+
+      return { success: true };
+    } catch (error) {
+      const settings = await this.getTelegramSettings();
+      settings.lastError = error.message;
+      this.store.set("telegramBot", settings);
+
+      throw new Error("Telegram gönderimi başarısız: " + error.message);
+    }
+  }
+
+  async compressVideo(inputPath, targetSize = 45) {
+    try {
+      const stats = fs.statSync(inputPath);
+      const fileSizeInMB = stats.size / (1024 * 1024);
+
+      if (fileSizeInMB <= targetSize) {
+        return inputPath;
+      }
+
+      const targetBitrate = Math.floor((targetSize * 8192) / 60);
+      const outputPath = path.join(
+        this.compressedDir,
+        `compressed_${Date.now()}_${path.basename(inputPath)}`
+      );
+
+      return new Promise((resolve, reject) => {
+        ffmpeg(inputPath)
+          .videoBitrate(targetBitrate)
+          .videoCodec("libx264")
+          .size("1280x?")
+          .audioCodec("aac")
+          .audioBitrate("128k")
+          .outputOptions(["-preset faster", "-crf 28", "-movflags +faststart"])
+          .on("end", () => {
+            const compressedSize = fs.statSync(outputPath).size / (1024 * 1024);
+            if (compressedSize > targetSize) {
+              fs.unlinkSync(outputPath);
+              this.compressVideo(inputPath, targetSize * 0.8)
+                .then(resolve)
+                .catch(reject);
+            } else {
+              resolve(outputPath);
+            }
+          })
+          .on("error", (err) => {
+            reject(new Error("Video sıkıştırma hatası: " + err.message));
+          })
+          .save(outputPath);
+      });
+    } catch (error) {
+      throw new Error("Video sıkıştırma hatası: " + error.message);
+    }
+  }
+}
+
+const videoManager = new VideoManager();
+module.exports = videoManager;
