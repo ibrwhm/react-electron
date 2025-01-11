@@ -7,18 +7,85 @@ const fs = require("fs");
 log.transports.file.level = "debug";
 log.transports.console.level = "debug";
 
-autoUpdater.logger = log;
-autoUpdater.autoDownload = true;
-autoUpdater.allowDowngrade = true;
-autoUpdater.requestHeaders = {
-  'Authorization': 'Bearer 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'
+// Güncelleme yapılandırması
+const setupAutoUpdater = () => {
+  autoUpdater.logger = log;
+  autoUpdater.autoDownload = true;
+  autoUpdater.allowDowngrade = true;
+  autoUpdater.requestHeaders = {
+    'Authorization': 'Bearer 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'
+  };
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: 'ibrwhm',
+    repo: 'react-electron',
+    private: true,
+  });
+
+  // Güncelleme event'leri
+  autoUpdater.on("checking-for-update", () => {
+    log.debug("Güncellemeler kontrol ediliyor...");
+    if (!splashWindow?.isDestroyed()) {
+      splashWindow?.webContents.send("update-status", "Güncellemeler kontrol ediliyor...");
+    }
+  });
+
+  autoUpdater.on("update-available", (info) => {
+    log.debug("Güncelleme mevcut:", info);
+    if (!splashWindow?.isDestroyed()) {
+      splashWindow?.webContents.send("update-status", `Yeni versiyon bulundu: ${info.version}. İndiriliyor...`);
+    }
+  });
+
+  autoUpdater.on("update-not-available", () => {
+    log.debug("Güncelleme mevcut değil");
+    if (!splashWindow?.isDestroyed()) {
+      splashWindow?.webContents.send("update-status", "Uygulama başlatılıyor...");
+      setTimeout(() => {
+        if (!splashWindow?.isDestroyed()) {
+          splashWindow?.destroy();
+        }
+        if (!mainWindow?.isDestroyed()) {
+          mainWindow?.show();
+        }
+      }, 2000);
+    }
+  });
+
+  autoUpdater.on("error", (err) => {
+    log.error("Güncelleme hatası:", err);
+    if (!splashWindow?.isDestroyed()) {
+      splashWindow?.webContents.send("update-status", "Güncelleme hatası. Uygulama başlatılıyor...");
+      setTimeout(() => {
+        if (!splashWindow?.isDestroyed()) {
+          splashWindow?.destroy();
+        }
+        if (!mainWindow?.isDestroyed()) {
+          mainWindow?.show();
+        }
+      }, 2000);
+    }
+  });
+
+  autoUpdater.on("download-progress", (progressObj) => {
+    let message = `İndiriliyor... ${progressObj.percent.toFixed(2)}%`;
+    log.debug(message);
+    if (!splashWindow?.isDestroyed()) {
+      splashWindow?.webContents.send("update-progress", progressObj.percent);
+      splashWindow?.webContents.send("update-status", message);
+    }
+  });
+
+  autoUpdater.on("update-downloaded", () => {
+    log.debug("Güncelleme indirildi");
+    if (!splashWindow?.isDestroyed()) {
+      splashWindow?.webContents.send("update-status", "Güncelleme indirildi. Yeniden başlatılıyor...");
+      setTimeout(() => {
+        autoUpdater.quitAndInstall(false, true);
+      }, 3000);
+    }
+  });
 };
-autoUpdater.setFeedURL({
-  provider: 'github',
-  owner: 'ibrwhm',
-  repo: 'react-electron',
-  private: true,
-});
 
 const isDev = process.env.NODE_ENV === "development";
 const os = require("os");
@@ -755,70 +822,20 @@ function setupIpcHandlers() {
   });
 };
 
-// Güncelleme event'leri
-autoUpdater.on("checking-for-update", () => {
-  log.debug("Güncellemeler kontrol ediliyor...");
-  if (splashWindow) {
-    splashWindow.webContents.send("update-status", "Güncellemeler kontrol ediliyor...");
-  }
-});
-
-autoUpdater.on("update-available", (info) => {
-  log.debug("Güncelleme mevcut:", info);
-  if (splashWindow) {
-    splashWindow.webContents.send("update-status", "Güncelleme mevcut. İndiriliyor...");
-  }
-});
-
-autoUpdater.on("update-not-available", () => {
-  log.debug("Güncelleme mevcut değil");
-  if (splashWindow) {
-    splashWindow.webContents.send("update-status", "Uygulama başlatılıyor...");
-    setTimeout(() => {
-      splashWindow.destroy();
-      mainWindow?.show();
-    }, 1000);
-  }
-});
-
-autoUpdater.on("error", (err) => {
-  log.error("Güncelleme hatası:", err);
-  if (splashWindow) {
-    splashWindow.webContents.send("update-status", "Güncelleme hatası. Uygulama başlatılıyor...");
-    setTimeout(() => {
-      splashWindow.destroy();
-      mainWindow?.show();
-    }, 1000);
-  }
-});
-
-autoUpdater.on("download-progress", (progressObj) => {
-  let message = `İndiriliyor... ${progressObj.percent.toFixed(2)}%`;
-  log.debug(message);
-  if (splashWindow) {
-    splashWindow.webContents.send("update-progress", progressObj.percent);
-    splashWindow.webContents.send("update-status", message);
-  }
-});
-
-autoUpdater.on("update-downloaded", () => {
-  log.debug("Güncelleme indirildi");
-  if (splashWindow) {
-    splashWindow.webContents.send("update-status", "Güncelleme indirildi. Yeniden başlatılıyor...");
-    setTimeout(() => {
-      autoUpdater.quitAndInstall(false, true);
-    }, 2000);
-  }
-});
-
 app.whenReady().then(async () => {
   try {
     log.debug("App is ready, initializing...");
 
+    // Güncelleme sistemini kur
+    setupAutoUpdater();
+
+    // Ana pencereyi oluştur
     mainWindow = createWindow();
 
+    // Splash ekranını oluştur
     splashWindow = createSplashWindow();
 
+    // Database bağlantısı
     connectDB().catch((dbError) => {
       log.error("Database connection error:", dbError);
     });
@@ -829,19 +846,32 @@ app.whenReady().then(async () => {
     if (!isDev) {
       setTimeout(async () => {
         try {
+          log.debug("Checking for updates...");
           await autoUpdater.checkForUpdates();
         } catch (err) {
           log.error("Güncelleme kontrolü hatası:", err);
-          splashWindow?.webContents.send("update-status", "Güncelleme kontrolü başarısız. Uygulama başlatılıyor...");
-          setTimeout(() => {
-            splashWindow?.destroy();
-          }, 1000);
+          if (!splashWindow?.isDestroyed()) {
+            splashWindow?.webContents.send("update-status", "Güncelleme kontrolü başarısız. Uygulama başlatılıyor...");
+            setTimeout(() => {
+              if (!splashWindow?.isDestroyed()) {
+                splashWindow?.destroy();
+              }
+              if (!mainWindow?.isDestroyed()) {
+                mainWindow?.show();
+              }
+            }, 2000);
+          }
         }
-      }, 1000);
+      }, 3000);
     } else {
       setTimeout(() => {
-        splashWindow?.destroy();
-      }, 1000);
+        if (!splashWindow?.isDestroyed()) {
+          splashWindow?.destroy();
+        }
+        if (!mainWindow?.isDestroyed()) {
+          mainWindow?.show();
+        }
+      }, 2000);
     }
   } catch (error) {
     log.error("Error in app.whenReady:", error);

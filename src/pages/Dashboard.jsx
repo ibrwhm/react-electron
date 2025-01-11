@@ -34,7 +34,7 @@ const Dashboard = () => {
           ...prev,
           os: osInfo?.os || 'Bilinmiyor',
           ipAddress: ipInfo?.ip || 'Bilinmiyor',
-          version: versionInfo?.version || '1.0.0',
+          version: versionInfo || '1.0.0',
           updateAvailable: updateInfo?.available || false
         }));
       } catch (error) {
@@ -58,7 +58,7 @@ const Dashboard = () => {
         const expiryDate = new Date(license.expiresAt);
         const startDate = new Date(license.createdAt);
         const today = new Date();
-        
+
         const daysLeft = differenceInDays(expiryDate, today);
         const totalDays = differenceInDays(expiryDate, startDate);
 
@@ -156,8 +156,8 @@ const Dashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <StatCard 
-          title="Lisans Durumu" 
+        <StatCard
+          title="Lisans Durumu"
           icon={<i className="ri-shield-check-line text-2xl text-telegram-primary"></i>}
         >
           <div className="flex items-center gap-3">
@@ -173,13 +173,12 @@ const Dashboard = () => {
               <span className="text-white">{systemInfo.daysLeft} gün</span>
             </div>
             <div className="h-2 bg-telegram-dark rounded-full overflow-hidden">
-              <div 
-                className={`h-full rounded-full ${
-                  systemInfo.status === 'active' ? 'bg-telegram-success' :
-                  systemInfo.status === 'warning' ? 'bg-telegram-warning' : 'bg-telegram-error'
-                }`}
-                style={{ 
-                  width: `${Math.max(0, Math.min(100, (systemInfo.daysLeft / systemInfo.totalDays) * 100))}%` 
+              <div
+                className={`h-full rounded-full ${systemInfo.status === 'active' ? 'bg-telegram-success' :
+                    systemInfo.status === 'warning' ? 'bg-telegram-warning' : 'bg-telegram-error'
+                  }`}
+                style={{
+                  width: `${Math.max(0, Math.min(100, (systemInfo.daysLeft / systemInfo.totalDays) * 100))}%`
                 }}
               ></div>
             </div>
@@ -193,8 +192,8 @@ const Dashboard = () => {
           </div>
         </StatCard>
 
-        <StatCard 
-          title="Aktif Oturum" 
+        <StatCard
+          title="Aktif Oturum"
           icon={<i className="ri-user-line text-2xl text-telegram-primary"></i>}
         >
           <div className="space-y-4">
@@ -218,8 +217,8 @@ const Dashboard = () => {
           </div>
         </StatCard>
 
-        <StatCard 
-          title="Son Giriş Bilgileri" 
+        <StatCard
+          title="Son Giriş Bilgileri"
           icon={<i className="ri-login-circle-line text-2xl text-telegram-primary"></i>}
         >
           <div className="grid grid-cols-2 gap-4">
@@ -248,8 +247,8 @@ const Dashboard = () => {
           </div>
         </StatCard>
 
-        <StatCard 
-          title="Güvenlik Durumu" 
+        <StatCard
+          title="Güvenlik Durumu"
           icon={<i className="ri-shield-check-line text-2xl text-telegram-success"></i>}
         >
           <div className="space-y-4">
@@ -273,18 +272,16 @@ const Dashboard = () => {
         </StatCard>
       </div>
 
-      <StatCard 
-        title="Sistem Durumu" 
+      <StatCard
+        title="Sistem Durumu"
         icon={<i className="ri-download-cloud-line text-2xl text-telegram-primary"></i>}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-full ${
-              systemInfo.updateAvailable ? 'bg-telegram-warning/10' : 'bg-telegram-success/10'
-            } flex items-center justify-center`}>
-              <i className={`${
-                systemInfo.updateAvailable ? 'ri-download-line text-telegram-warning' : 'ri-check-line text-telegram-success'
-              } text-xl`}></i>
+            <div className={`w-10 h-10 rounded-full ${systemInfo.updateAvailable ? 'bg-telegram-warning/10' : 'bg-telegram-success/10'
+              } flex items-center justify-center`}>
+              <i className={`${systemInfo.updateAvailable ? 'ri-download-line text-telegram-warning' : 'ri-check-line text-telegram-success'
+                } text-xl`}></i>
             </div>
             <div>
               <div className="text-white">
@@ -295,14 +292,13 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
-          <button 
+          <button
             onClick={handleUpdate}
             disabled={!systemInfo.updateAvailable}
-            className={`px-4 py-2 rounded-lg ${
-              systemInfo.updateAvailable 
-                ? 'bg-telegram-primary/10 text-telegram-primary hover:bg-telegram-primary/20' 
+            className={`px-4 py-2 rounded-lg ${systemInfo.updateAvailable
+                ? 'bg-telegram-primary/10 text-telegram-primary hover:bg-telegram-primary/20'
                 : 'bg-telegram-dark text-telegram-secondary cursor-not-allowed'
-            } transition-colors`}
+              } transition-colors`}
           >
             {systemInfo.updateAvailable ? 'Güncelle' : 'Sistem Güncel'}
           </button>
