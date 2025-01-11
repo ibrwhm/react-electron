@@ -8,9 +8,10 @@ log.transports.file.level = "debug";
 log.transports.console.level = "debug";
 
 autoUpdater.logger = log;
-autoUpdater.autoDownload = false;
+autoUpdater.autoDownload = true;
+autoUpdater.allowDowngrade = true;
 autoUpdater.requestHeaders = {
-  'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`
+  'Authorization': 'Bearer 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'
 };
 autoUpdater.setFeedURL({
   provider: 'github',
@@ -749,67 +750,58 @@ function setupIpcHandlers() {
 
 // Güncelleme event'leri
 autoUpdater.on("checking-for-update", () => {
-  splashWindow?.webContents.send(
-    "update-status",
-    "Güncellemeler kontrol ediliyor..."
-  );
   log.debug("Güncellemeler kontrol ediliyor...");
+  if (splashWindow) {
+    splashWindow.webContents.send("update-status", "Güncellemeler kontrol ediliyor...");
+  }
 });
 
 autoUpdater.on("update-available", (info) => {
-  splashWindow?.webContents.send(
-    "update-status",
-    "Güncelleme mevcut. İndiriliyor..."
-  );
   log.debug("Güncelleme mevcut:", info);
-  autoUpdater.downloadUpdate().catch((err) => {
-    log.error("Güncelleme indirme hatası:", err);
-    splashWindow?.destroy();
-    mainWindow?.show();
-  });
+  if (splashWindow) {
+    splashWindow.webContents.send("update-status", "Güncelleme mevcut. İndiriliyor...");
+  }
 });
 
 autoUpdater.on("update-not-available", () => {
-  splashWindow?.webContents.send("update-status", "Uygulama başlatılıyor...");
   log.debug("Güncelleme mevcut değil");
+  if (splashWindow) {
+    splashWindow.webContents.send("update-status", "Uygulama başlatılıyor...");
+    setTimeout(() => {
+      splashWindow.destroy();
+      mainWindow?.show();
+    }, 1000);
+  }
+});
 
-  setTimeout(() => {
-    splashWindow?.destroy();
-    mainWindow?.show();
-  }, 1000);
+autoUpdater.on("error", (err) => {
+  log.error("Güncelleme hatası:", err);
+  if (splashWindow) {
+    splashWindow.webContents.send("update-status", "Güncelleme hatası. Uygulama başlatılıyor...");
+    setTimeout(() => {
+      splashWindow.destroy();
+      mainWindow?.show();
+    }, 1000);
+  }
 });
 
 autoUpdater.on("download-progress", (progressObj) => {
   let message = `İndiriliyor... ${progressObj.percent.toFixed(2)}%`;
   log.debug(message);
-
-  splashWindow?.webContents.send("update-progress", progressObj.percent);
-  splashWindow?.webContents.send("update-status", message);
+  if (splashWindow) {
+    splashWindow.webContents.send("update-progress", progressObj.percent);
+    splashWindow.webContents.send("update-status", message);
+  }
 });
 
 autoUpdater.on("update-downloaded", () => {
-  splashWindow?.webContents.send(
-    "update-status",
-    "Güncelleme indirildi. Yeniden başlatılıyor..."
-  );
   log.debug("Güncelleme indirildi");
-
-  setTimeout(() => {
-    autoUpdater.quitAndInstall(false, true);
-  }, 2000);
-});
-
-autoUpdater.on("error", (err) => {
-  log.error("Güncelleme hatası:", err);
-  splashWindow?.webContents.send(
-    "update-status",
-    "Güncelleme hatası. Uygulama başlatılıyor..."
-  );
-
-  setTimeout(() => {
-    splashWindow?.destroy();
-    mainWindow?.show();
-  }, 2000);
+  if (splashWindow) {
+    splashWindow.webContents.send("update-status", "Güncelleme indirildi. Yeniden başlatılıyor...");
+    setTimeout(() => {
+      autoUpdater.quitAndInstall(false, true);
+    }, 2000);
+  }
 });
 
 app.whenReady().then(async () => {
