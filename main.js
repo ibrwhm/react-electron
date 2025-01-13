@@ -14,6 +14,9 @@ const os = require("os");
 const envPath = isDev ? '.env' : path.join(process.resourcesPath, '.env');
 dotenv.config({ path: envPath });
 
+// Token kontrolü için log ekleyelim
+log.debug('GitHub Token:', process.env.GITHUB_TOKEN ? 'Mevcut' : 'Bulunamadı');
+
 const PRELOAD_PATH = isDev
   ? path.join(__dirname, "preload.js")
   : path.join(process.resourcesPath, "preload.js");
@@ -24,7 +27,7 @@ const SPLASH_PATH = isDev
 
 const ICON_PATH = isDev
   ? path.join(__dirname, "src", "assets", "icon.ico")
-  : path.join(process.resourcesPath, "dist", "assets", "icon.ico");
+  : path.join(process.resourcesPath, "build", "icon.ico");
 
 let mainWindow = null;
 let tray = null;
@@ -44,6 +47,7 @@ function createSplashWindow() {
         contextIsolation: false,
       },
       center: true,
+      icon: ICON_PATH
     });
 
     log.debug("Loading splash window from:", SPLASH_PATH);
@@ -85,7 +89,6 @@ function createWindow() {
         const indexPath = path.join(process.resourcesPath, 'dist', 'index.html');
         log.debug("Loading production index from:", indexPath);
 
-        // Dosyanın varlığını kontrol et
         if (!fs.existsSync(indexPath)) {
           log.error("index.html not found at:", indexPath);
           throw new Error("index.html not found");
@@ -124,7 +127,6 @@ function createTray() {
       console.log("[debug] Tray created successfully");
     } catch (error) {
       console.error("[error] Failed to create tray:", error);
-      // Tray olmadan da devam et
     }
 
     const contextMenu = Menu.buildFromTemplate([
@@ -163,7 +165,6 @@ function createTray() {
     log.debug("Tray created successfully");
   } catch (error) {
     log.error("Error in createTray:", error);
-    // Tray oluşturma hatası uygulamanın çalışmasını engellememelidir
   }
 }
 
@@ -180,8 +181,6 @@ const licenseManager = require("./src/utils/LicenseManager");
 const videoManager = require("./src/utils/VideoManager");
 const emojiManager = require("./src/utils/EmojiManager");
 const sessionManager = require("./src/utils/SessionManager");
-
-// GitHub güncellemelerini tamamen devre dışı bırakalım
 
 function setupIpcHandlers() {
   ipcMain.handle("get-system-info", () => {
@@ -736,26 +735,30 @@ app.whenReady().then(async () => {
   try {
     log.debug("App is ready, initializing...");
 
-    // Splash ekranını oluştur
     splashWindow = createSplashWindow();
     if (!splashWindow) {
       throw new Error("Failed to create splash window");
     }
 
-    // Ana pencereyi arka planda oluştur
     mainWindow = createWindow();
     if (!mainWindow) {
       throw new Error("Failed to create main window");
     }
 
-    // Ana pencere yüklendiğinde
     mainWindow.webContents.on('did-finish-load', async () => {
       log.debug('Main window finished loading');
 
-      // Güncelleme kontrolü
       if (!isDev) {
         autoUpdater.autoDownload = true;
         autoUpdater.allowDowngrade = true;
+
+        autoUpdater.setFeedURL({
+          provider: 'github',
+          owner: 'ibrwhm',
+          repo: 'react-electron',
+          token: process.env.GITHUB_TOKEN,
+          private: true
+        });
 
         autoUpdater.on('checking-for-update', () => {
           if (splashWindow) {
@@ -813,7 +816,6 @@ app.whenReady().then(async () => {
           if (mainWindow) mainWindow.show();
         }
       } else {
-        // Geliştirme modunda splash ekranını kısa süre göster
         setTimeout(() => {
           if (splashWindow) splashWindow.destroy();
           if (mainWindow) mainWindow.show();
@@ -821,14 +823,12 @@ app.whenReady().then(async () => {
       }
     });
 
-    // Database bağlantısı
     connectDB().catch((dbError) => {
       log.error("Database connection error:", dbError);
     });
 
     setupIpcHandlers();
 
-    // Tray'i oluştur
     try {
       createTray();
     } catch (trayError) {

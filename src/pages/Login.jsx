@@ -40,7 +40,7 @@ const Login = () => {
       <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full space-y-8">
           <div className="text-center">
-            <img src="/assets/icon.ico" alt="Logo" className="mx-auto h-16 w-16" />
+            <img src={appIcon} alt="Logo" className="mx-auto h-16 w-16" />
             <h2 className="mt-6 text-3xl font-extrabold text-white">
               Lisans Doğrulama
             </h2>
