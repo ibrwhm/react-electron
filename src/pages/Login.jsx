@@ -19,7 +19,7 @@ const Login = () => {
     try {
       const result = await window.api.validateLicense(licenseKey);
 
-      if (result.valid) {
+      if (result.data.valid) {
         await window.api.storeLicense(licenseKey);
         toast.success("Giriş başarılı!");
         navigate("/", { replace: true });
@@ -28,7 +28,6 @@ const Login = () => {
       }
     } catch (error) {
       toast.error("Giriş yapılırken bir hata oluştu");
-      console.error("Login error:", error);
     } finally {
       setLoading(false);
     }

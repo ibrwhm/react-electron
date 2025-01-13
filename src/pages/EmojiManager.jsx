@@ -45,7 +45,7 @@ const EmojiManager = () => {
         if (result.success) {
           setReactionLog(result.log);
         }
-      }, 1000);
+      }, 10000);
     }
     return () => {
       if (interval) {
@@ -63,17 +63,14 @@ const EmojiManager = () => {
 
   const loadChannels = async () => {
     try {
-      const result = await window.api.getReactionChannels();
-
+      const result = await window.api.getChannelList();
       if (result.success && Array.isArray(result.channels)) {
         setChannels(result.channels);
       } else {
-        console.error("Kanal yükleme hatası:", result);
         setChannels([]);
         toast.error("Kanallar yüklenirken hata oluştu");
       }
     } catch (error) {
-      console.error("loadChannels hatası:", error);
       setChannels([]);
       toast.error("Kanallar yüklenirken beklenmeyen bir hata oluştu");
     }
@@ -129,7 +126,7 @@ const EmojiManager = () => {
         active: false,
       };
 
-      const result = await window.api.addReactionChannel(channelData);
+      const result = await window.api.addChannel(channelData);
       if (result.success) {
         await loadChannels();
         setNewChannel({ username: "", title: "" });
@@ -144,7 +141,7 @@ const EmojiManager = () => {
   };
 
   const handleRemoveChannel = async (channelId) => {
-    const result = await window.api.removeReactionChannel(channelId);
+    const result = await window.api.removeChannel(channelId);
     if (result.success) {
       await loadChannels();
       toast.success("Kanal kaldırıldı");
@@ -318,15 +315,16 @@ const EmojiManager = () => {
               </div>
               <DialogFooter className="gap-2">
                 <Button
-                  variant="outline"
+                  variant="destructive"
                   onClick={() => setOpen(false)}
-                  className="flex-1 border-telegram-border hover:bg-telegram-hover"
+                  className="flex-1"
                 >
                   İptal
                 </Button>
                 <Button
+                  variant="secondary"
                   onClick={handleAddChannel}
-                  className="flex-1 bg-telegram-primary hover:bg-telegram-primary-hover"
+                  className="flex-1"
                 >
                   Ekle
                 </Button>
@@ -347,7 +345,9 @@ const EmojiManager = () => {
                       {channel.emoji}
                     </div>
                     <div className="space-y-1">
-                      <div className="font-medium text-lg">{channel.title}</div>
+                      <div className="font-medium text-lg text-telegram-primary">
+                        {channel.title}
+                      </div>
                       <div className="text-sm text-telegram-secondary flex items-center gap-2">
                         <span>@{channel.id.split("/").pop()}</span>
                         <span className="w-1 h-1 rounded-full bg-telegram-secondary/50"></span>

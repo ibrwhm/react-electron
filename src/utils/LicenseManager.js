@@ -40,7 +40,6 @@ class LicenseManager {
         cwd: this.storeDir,
       });
     } catch (error) {
-      console.error("License Store initialization error:", error);
       throw error;
     }
   }

@@ -35,7 +35,6 @@ class SessionManager {
         this.store.set("sessions", []);
       }
     } catch (error) {
-      console.error("Session Store initialization error:", error);
       throw error;
     }
   }
@@ -91,7 +90,6 @@ class SessionManager {
 
     return {
       success: true,
-      sessions: getSessions,
     };
   }
 

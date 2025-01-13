@@ -1,24 +1,25 @@
-import React, { useState, useEffect, useRef } from "react";
-import { FiUpload, FiTrash2, FiEdit2 } from "react-icons/fi";
-import { BiLoaderAlt } from "react-icons/bi";
-import {
-  BsCheckCircleFill,
-  BsXCircleFill,
-  BsClock,
-  BsStopFill,
-  BsPlayFill,
-} from "react-icons/bs";
-import {
-  FaTelegramPlane,
-  FaSave,
-  FaStop,
-  FaPlay,
-  FaExclamationCircle,
-  FaCheckCircle,
-} from "react-icons/fa";
-import toast from "react-hot-toast";
-
 const { api } = window;
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
+import { BiLoaderAlt } from "react-icons/bi";
+import { FaTelegramPlane, FaStopCircle } from "react-icons/fa";
+import {
+  FiUpload,
+  FiTrash2,
+  FiUsers,
+  FiEdit,
+  FiClock,
+  FiCheck,
+  FiX,
+  FiPlayCircle,
+  FiVideo,
+} from "react-icons/fi";
+import toast from "react-hot-toast";
 
 const VideoManager = () => {
   const [channels, setChannels] = useState([]);
@@ -38,47 +39,55 @@ const VideoManager = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
   const progressInterval = useRef(null);
+  const cleanupRef = useRef(false);
 
   useEffect(() => {
     loadInitialData();
-  }, []);
-
-  useEffect(() => {
     return () => {
+      cleanupRef.current = true;
       if (progressInterval.current) {
         clearInterval(progressInterval.current);
       }
     };
   }, []);
 
-  const startProgressTracking = () => {
+  const startProgressTracking = useCallback(() => {
     if (progressInterval.current) {
       clearInterval(progressInterval.current);
     }
 
     progressInterval.current = setInterval(async () => {
-      const progress = await api.getUploadProgress();
-      setUploadProgress(progress);
+      try {
+        const progress = await api.getUploadProgress();
+        if (!cleanupRef.current) {
+          setUploadProgress(progress.data);
 
-      if (progress.status === "tamamlandı" || progress.status === "hata") {
-        clearInterval(progressInterval.current);
-        progressInterval.current = null;
+          if (
+            progress.data.status === "tamamlandı" ||
+            progress.data.status === "hata"
+          ) {
+            clearInterval(progressInterval.current);
+            progressInterval.current = null;
+          }
+        }
+      } catch (error) {
+        console.error("İlerleme takibinde hata:", error);
       }
     }, 500);
-  };
+  }, []);
 
   const loadInitialData = async () => {
     try {
       const videos = await api.getAllVideos();
-      setChannels(videos);
+      setChannels(videos.data);
 
       const times = await api.getTimes();
-      setScheduledTimes(times || []);
+      setScheduledTimes(times.data);
       setHasTimeChanges(false);
 
       const status = await api.getSchedulerStatus();
-      setIsSchedulerRunning(status);
-
+      setIsSchedulerRunning(status.data);
+      setSchedulerMessage(status.message);
       const telegramSettings = (await api.getTelegramSettings()) || {
         token: "",
         isEnabled: false,
@@ -86,14 +95,15 @@ const VideoManager = () => {
         lastSuccess: "",
       };
 
-      setBotToken(telegramSettings.token || "");
-      setIsBotEnabled(telegramSettings.isEnabled || false);
+      setBotToken(telegramSettings.data.token || "");
+      setIsBotEnabled(telegramSettings.data.isEnabled || false);
       setBotStatus({
-        error: telegramSettings.lastError || "",
-        success: telegramSettings.lastSuccess || "",
+        error: telegramSettings.data.lastError || "",
+        success: telegramSettings.data.lastSuccess || "",
       });
     } catch (error) {
-      console.error("Veriler yüklenirken hata oluştu:", error);
+      console.error("Veriler yüklenirken hata:", error);
+      toast.error(error.message || "Veriler yüklenirken bir hata oluştu");
     }
   };
 
@@ -113,40 +123,50 @@ const VideoManager = () => {
 
       setSelectedFiles(result.filePaths);
     } catch (error) {
-      console.error("Dosya seçiminde hata:", error);
+      throw new Error("Dosya seçiminde hata");
     }
   };
 
-  const handleUpload = async () => {
-    if (!selectedFiles || !channelLink) return;
+  const handleUpload = useCallback(async () => {
+    if (!selectedFiles || !channelLink) {
+      return toast.error("Lütfen video ve kanal bağlantısı seçin!");
+    }
 
     try {
       setIsUploading(true);
       startProgressTracking();
 
       for (const filePath of selectedFiles) {
+        if (cleanupRef.current) break;
+
         const result = await api.saveVideo({
           filePath: filePath,
-          description: description,
+          description: description || "",
           channelLink: channelLink,
         });
 
-        if (result.success) {
+        if (result.success && !cleanupRef.current) {
           setDescription("");
           setChannelLink("");
         }
       }
 
-      setSelectedFiles([]);
-      await loadInitialData();
+      if (!cleanupRef.current) {
+        setSelectedFiles([]);
+        await loadInitialData();
+      }
     } catch (error) {
       console.error("Video yükleme hatası:", error);
-      toast.error(error.message);
+      if (!cleanupRef.current) {
+        toast.error(error.message);
+      }
     } finally {
-      setIsUploading(false);
-      setTimeout(() => setUploadProgress(null), 3000);
+      if (!cleanupRef.current) {
+        setIsUploading(false);
+        setTimeout(() => setUploadProgress(null), 3000);
+      }
     }
-  };
+  }, [selectedFiles, channelLink, description, startProgressTracking]);
 
   const handleDeleteVideo = async (channelId, videoId) => {
     try {
@@ -173,7 +193,6 @@ const VideoManager = () => {
 
       toast.success("Video başarıyla silindi!");
     } catch (error) {
-      console.error("Video silinirken hata:", error);
       toast.error("Video silinirken hata oluştu!");
     }
   };
@@ -231,7 +250,7 @@ const VideoManager = () => {
     try {
       await api.startScheduler();
       const status = await api.getSchedulerStatus();
-      setIsSchedulerRunning(status);
+      setIsSchedulerRunning(status.data);
       setSchedulerMessage(status.message);
     } catch (error) {
       console.error("Zamanlayıcı başlatılırken hata oluştu:", error);
@@ -242,7 +261,7 @@ const VideoManager = () => {
     try {
       await api.stopScheduler();
       const status = await api.getSchedulerStatus();
-      setIsSchedulerRunning(status);
+      setIsSchedulerRunning(status.data);
       setSchedulerMessage(status.message);
     } catch (error) {
       console.error("Zamanlayıcı durdurulurken hata oluştu:", error);
@@ -292,15 +311,14 @@ const VideoManager = () => {
         isEnabled: newStatus,
       });
 
-      setIsBotEnabled(result.isEnabled);
+      setIsBotEnabled(result.data.isEnabled);
       setBotStatus({
-        lastError: result.lastError,
-        lastSuccess: result.lastSuccess,
+        lastError: result.data.lastError,
+        lastSuccess: result.data.lastSuccess,
       });
 
       toast.success(newStatus ? "Bot başlatıldı!" : "Bot durduruldu!");
     } catch (error) {
-      console.error("Bot durumu değiştirilirken hata:", error);
       toast.error("Bot durumu değiştirilirken hata oluştu!");
       setBotStatus({
         lastError: error.message,
@@ -309,7 +327,7 @@ const VideoManager = () => {
     }
   };
 
-  const renderProgressBar = () => {
+  const renderProgressBar = useCallback(() => {
     if (!uploadProgress) return null;
 
     const getStatusColor = () => {
@@ -325,17 +343,17 @@ const VideoManager = () => {
 
     const getStatusText = () => {
       switch (uploadProgress.stage) {
-        case "başlatılıyor":
+        case "started":
           return "Video yükleniyor...";
-        case "sıkıştırma":
-          return `Sıkıştırılıyor (${uploadProgress.fps || 0} FPS)`;
-        case "kopyalama":
-          return "Dosya kopyalanıyor...";
-        case "kayıt":
+        case "compression":
+          return `Sıkıştırılıyor`;
+        case "preparation":
+          return "Dosya hazırlanıyor...";
+        case "record":
           return "Kaydediliyor...";
-        case "tamamlandı":
+        case "completed":
           return "Yükleme tamamlandı!";
-        case "hata":
+        case "error":
           return `Hata: ${uploadProgress.error}`;
         default:
           return "İşleniyor...";
@@ -356,7 +374,7 @@ const VideoManager = () => {
         </div>
         <div className="flex justify-between items-center text-sm">
           <span className="text-gray-400">{getStatusText()}</span>
-          {uploadProgress.stage === "sıkıştırma" &&
+          {uploadProgress.stage === "compression" &&
             uploadProgress.targetSize &&
             uploadProgress.processedDuration && (
               <div className="text-xs text-gray-500 space-y-1">
@@ -368,392 +386,473 @@ const VideoManager = () => {
         </div>
       </div>
     );
+  }, [uploadProgress]);
+
+  useEffect(() => {}, [channels]);
+
+  const getVideoStatus = (video) => {
+    switch (video.status) {
+      case "sent":
+        return (
+          <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+            Gönderildi
+          </span>
+        );
+      case "error":
+        return (
+          <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
+            Hata
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
+            Bekliyor
+          </span>
+        );
+    }
   };
 
-  return (
-    <div className="p-6 space-y-6 min-h-screen text-white transition-all duration-200">
-      <h1 className="text-2xl font-semibold mb-8">Video İşlemleri</h1>
+  const sortedChannels = useMemo(() => {
+    return channels
+      .slice()
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }, [channels]);
 
-      <div className="bg-telegram-card border border-telegram-border rounded-lg p-6 space-y-6">
-        <h2 className="text-lg font-semibold">Video Yükleme</h2>
-
-        <div className="w-full">
-          <button
-            onClick={handleFileSelect}
-            disabled={isUploading}
-            className="w-full p-4 border border-telegram-border rounded-lg hover:bg-telegram-hover transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FiUpload className="w-6 h-6" />
-            <span>
-              {selectedFiles.length > 0 ? "Videolar Seçildi" : "Video Seç"}
-            </span>
-          </button>
-          {selectedFiles.length > 0 && (
-            <div className="mt-2 text-sm text-gray-400">
-              {selectedFiles.map((file, index) => (
-                <p key={index} className="truncate">
-                  Seçilen: {file.split("\\").pop()}
-                </p>
-              ))}
-            </div>
-          )}
+  const renderVideoList = useCallback(() => {
+    if (!sortedChannels || sortedChannels.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center p-8 text-gray-500">
+          <FiUsers className="w-12 h-12 mb-2" />
+          <p>Henüz video yüklenmemiş</p>
+          <p className="text-sm">
+            Video yüklemek için yukarıdaki formu kullanın
+          </p>
         </div>
+      );
+    }
 
+    return sortedChannels.map((channel) => (
+      <div
+        key={channel._id}
+        className="p-4 mb-4 rounded-lg bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 hover:border-telegram-primary/20 transition-all duration-300"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-medium text-white flex items-center gap-2">
+            <FaTelegramPlane className="text-telegram-primary" />
+            {channel.channelLink}
+          </h3>
+        </div>
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-gray-400">
-            Telegram Kanal Linki
-          </label>
-          <input
-            type="text"
-            value={channelLink}
-            onChange={(e) => setChannelLink(e.target.value)}
-            placeholder="https://t.me/kanal"
-            className="w-full p-3 bg-telegram-input border border-telegram-border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-gray-400">
-            Video Açıklaması
-          </label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Video açıklaması..."
-            className="w-full p-3 bg-telegram-input border border-telegram-border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 min-h-[120px] resize-y"
-          />
-        </div>
-
-        {renderProgressBar()}
-
-        <button
-          onClick={handleUpload}
-          disabled={isUploading || !channelLink || !selectedFiles}
-          className={`w-full p-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-all duration-200
-            ${
-              isUploading
-                ? "bg-cyan-700 cursor-not-allowed"
-                : "bg-cyan-600 hover:bg-cyan-500"
-            } disabled:opacity-50 disabled:cursor-not-allowed`}
-        >
-          {isUploading ? (
-            <>
-              <BiLoaderAlt className="w-5 h-5 animate-spin" />
-              <span>Videolar Yükleniyor...</span>
-            </>
-          ) : (
-            <>
-              <FiUpload className="w-5 h-5" />
-              <span>Videoları Yükle</span>
-            </>
-          )}
-        </button>
-      </div>
-
-      <div>
-        <h2 className="text-xl font-semibold mb-4">Yüklenen Videolar</h2>
-        <div className="bg-telegram-card border border-telegram-border rounded-lg p-6 space-y-8 max-h-[600px] overflow-auto">
-          {channels.map((channel, index) => (
-            <div key={index} className="space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-700 pb-2">
-                <h3 className="text-sm font-medium text-gray-400">
-                  {channel.channelLink}
-                </h3>
-                <span className="text-xs text-gray-500">
-                  {new Date().toLocaleDateString("tr-TR", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </span>
+          {channel.videos.map((video) => (
+            <div
+              key={video._id}
+              className="flex items-center justify-between p-3 rounded-lg bg-gray-700/30 hover:bg-gray-700/50 border border-gray-600/20 transition-all duration-300"
+            >
+              <div className="flex items-center space-x-4 flex-1">
+                <div className="w-10 h-10 rounded-lg bg-telegram-primary/10 flex items-center justify-center">
+                  <FiVideo className="w-5 h-5 text-telegram-primary" />
+                </div>
+                <div className="flex-1 min-w-0 max-w-[300px]">
+                  <p className="text-sm text-gray-300 truncate">
+                    {video.filename}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1 truncate">
+                    {new Date(video.createdAt).toLocaleString("tr-TR")}
+                  </p>
+                </div>
+                <div className="flex-shrink-0">{getVideoStatus(video)}</div>
               </div>
-
-              <div className="space-y-2">
-                {channel.videos.map((video, videoIndex) => (
-                  <div
-                    key={videoIndex}
-                    className="flex items-center justify-between p-3 bg-telegram-input border border-telegram-border rounded-lg transition-all duration-200"
-                  >
-                    <div className="flex items-center space-x-3 flex-1">
-                      <div className="flex-shrink-0">
-                        {video.status === "sent" && (
-                          <BsCheckCircleFill className="w-5 h-5 text-green-500" />
-                        )}
-                        {video.status === "pending" && (
-                          <BsClock className="w-5 h-5 text-yellow-500" />
-                        )}
-                        {video.status === "error" && (
-                          <BsXCircleFill className="w-5 h-5 text-red-500" />
-                        )}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-white truncate">
-                          {video.filename.length > 20
-                            ? video.filename.substring(0, 20) + "..."
-                            : video.filename}
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          {new Date(video.createdAt).toLocaleDateString(
-                            "tr-TR",
-                            {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            }
-                          )}
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => handleDeleteVideo(channel._id, video._id)}
-                      className="ml-2 p-2 text-red-500 bg-red-500/10 hover:text-white/70 hover:bg-red-500/10 rounded-lg transition-all duration-200"
-                    >
-                      <FiTrash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <button
+                onClick={() => handleDeleteVideo(channel._id, video._id)}
+                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all duration-300 ml-2"
+              >
+                <FiTrash2 className="w-5 h-5" />
+              </button>
             </div>
           ))}
+        </div>
+      </div>
+    ));
+  }, [sortedChannels, handleDeleteVideo]);
 
-          {channels.length === 0 && (
-            <div className="text-center py-8 text-gray-400">
-              Henüz video yüklenmemiş
+  return (
+    <div className="p-8 space-y-8 min-h-screen text-white bg-gradient-to-b from-telegram-dark to-telegram-dark/95">
+      <div className="max-w-6xl mx-auto">
+        <h1 className="text-3xl font-bold mb-2">Video İşlemleri</h1>
+        <p className="text-telegram-secondary">
+          Video yükleme ve zamanlama işlemlerini buradan yönetebilirsiniz
+        </p>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-telegram-card/50 backdrop-blur-sm border border-telegram-border/10 rounded-xl p-6 space-y-6">
+              <div className="flex items-center justify-between border-b border-telegram-border/10 pb-4">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <FiUpload className="text-telegram-primary" />
+                  Video Yükleme
+                </h2>
+              </div>
+
+              <div className="w-full">
+                <button
+                  onClick={handleFileSelect}
+                  disabled={isUploading}
+                  className="w-full h-32 border-2 border-dashed border-telegram-border/20 rounded-xl hover:border-telegram-primary/50 hover:bg-telegram-primary/5 transition-all duration-300 flex flex-col items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <FiUpload className="w-8 h-8 text-telegram-primary" />
+                  <span className="text-telegram-secondary font-medium">
+                    {selectedFiles.length > 0
+                      ? "Videolar Seçildi"
+                      : "Video Seçmek için Tıklayın"}
+                  </span>
+                  {selectedFiles.length > 0 && (
+                    <span className="text-sm text-telegram-secondary/70">
+                      {selectedFiles.length} video seçildi
+                    </span>
+                  )}
+                </button>
+                {selectedFiles.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {selectedFiles.map((file, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 bg-telegram-dark/50 rounded-lg border border-telegram-border/10"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="w-8 h-8 rounded-lg bg-telegram-primary/10 flex items-center justify-center">
+                            <FiUpload className="w-4 h-4 text-telegram-primary" />
+                          </div>
+                          <span className="text-sm text-telegram-secondary">
+                            {file.split("\\").pop()}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-telegram-secondary mb-2">
+                    Telegram Kanal Linki
+                  </label>
+                  <input
+                    type="text"
+                    value={channelLink}
+                    onChange={(e) => setChannelLink(e.target.value)}
+                    placeholder="https://t.me/kanal"
+                    className="w-full p-3 bg-telegram-dark/50 border border-telegram-border/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-telegram-primary/20 focus:border-transparent transition-all duration-200 placeholder:text-telegram-secondary/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-telegram-secondary mb-2">
+                    Video Açıklaması
+                  </label>
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Video açıklaması..."
+                    className="w-full p-3 bg-telegram-dark/50 border border-telegram-border/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-telegram-primary/20 focus:border-transparent transition-all duration-200 min-h-[120px] resize-y placeholder:text-telegram-secondary/50"
+                  />
+                </div>
+              </div>
+
+              {renderProgressBar()}
+
+              <button
+                onClick={handleUpload}
+                disabled={isUploading || !channelLink || !selectedFiles.length}
+                className={`w-full p-4 rounded-xl font-medium flex items-center justify-center gap-2 transition-all duration-200
+                  ${
+                    isUploading
+                      ? "bg-telegram-primary/50 cursor-not-allowed"
+                      : "bg-telegram-primary hover:bg-telegram-primary/90"
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {isUploading ? (
+                  <>
+                    <BiLoaderAlt className="w-5 h-5 animate-spin" />
+                    <span>Videolar Yükleniyor...</span>
+                  </>
+                ) : (
+                  <>
+                    <FiUpload className="w-5 h-5" />
+                    <span>Videoları Yükle</span>
+                  </>
+                )}
+              </button>
             </div>
-          )}
-        </div>
-      </div>
 
-      <div>
-        <h2 className="text-xl font-semibold mb-4">Zamanlayıcı Kontrolü</h2>
-        <div className="bg-telegram-card border border-telegram-border rounded-lg p-6 space-y-4">
-          <div className="flex items-center space-x-2">
-            <div
-              className={`w-3 h-3 rounded-full ${
-                isSchedulerRunning ? "bg-emerald-500" : "bg-red-500"
-              }`}
-            ></div>
-            <span className="text-sm font-medium">
-              {isSchedulerRunning
-                ? "Zamanlayıcı Çalışıyor"
-                : "Zamanlayıcı Durdu"}
-            </span>
+            <div className="bg-telegram-card/50 backdrop-blur-sm border border-telegram-border/10 rounded-xl p-6">
+              <div className="flex items-center justify-between border-b border-telegram-border/10 pb-4 mb-6">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <FiUsers className="text-telegram-primary" />
+                  Yüklenen Videolar
+                </h2>
+              </div>
+              {renderVideoList()}
+            </div>
           </div>
 
-          {schedulerMessage && (
-            <div className="text-sm text-gray-400">{schedulerMessage}</div>
-          )}
+          <div className="space-y-6">
+            <div className="bg-telegram-card/50 backdrop-blur-sm border border-telegram-border/10 rounded-xl p-6 space-y-6">
+              <div className="flex items-center justify-between border-b border-telegram-border/10 pb-4">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <FiClock className="text-telegram-primary" />
+                  Zamanlayıcı
+                </h2>
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      isSchedulerRunning ? "bg-emerald-400" : "bg-red-400"
+                    }`}
+                  />
+                  <span className="text-sm text-telegram-secondary">
+                    {isSchedulerRunning ? "Aktif" : "Pasif"}
+                  </span>
+                </div>
+              </div>
 
-          <button
-            onClick={
-              isSchedulerRunning ? handleStopScheduler : handleStartScheduler
-            }
-            className={`w-full p-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-all duration-200
-              ${isSchedulerRunning ? "bg-red-600" : "bg-emerald-600"}`}
-          >
-            {isSchedulerRunning ? (
-              <>
-                <BsStopFill className="w-5 h-5" />
-                Zamanlayıcıyı Durdur
-              </>
-            ) : (
-              <>
-                <BsPlayFill className="w-5 h-5" />
-                Zamanlayıcıyı Başlat
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+              {schedulerMessage && (
+                <div className="p-3 rounded-lg bg-telegram-dark/30 border border-telegram-border/10">
+                  <p className="text-sm text-telegram-secondary">
+                    {schedulerMessage}
+                  </p>
+                </div>
+              )}
 
-      <div>
-        <h2 className="text-xl font-semibold mb-4">Gönderim Zamanları</h2>
-        <div className="bg-telegram-card border border-telegram-border rounded-lg p-6 space-y-4">
-          <div className="flex gap-2">
-            <input
-              type="time"
-              value={newTime}
-              onChange={(e) => setNewTime(e.target.value)}
-              className="flex-1 p-2 bg-telegram-input border border-telegram-border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-            <button
-              onClick={handleAddTime}
-              disabled={!newTime}
-              className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-            >
-              Ekle
-            </button>
-          </div>
+              <button
+                onClick={
+                  isSchedulerRunning
+                    ? handleStopScheduler
+                    : handleStartScheduler
+                }
+                className={`w-full p-4 rounded-xl font-medium flex items-center justify-center gap-2 transition-all duration-200
+                  ${
+                    isSchedulerRunning
+                      ? "bg-red-500 hover:bg-red-600"
+                      : "bg-emerald-500 hover:bg-emerald-600"
+                  }`}
+              >
+                {isSchedulerRunning ? (
+                  <>
+                    <FaStopCircle className="w-5 h-5" />
+                    Zamanlayıcıyı Durdur
+                  </>
+                ) : (
+                  <>
+                    <FiPlayCircle className="w-5 h-5" />
+                    Zamanlayıcıyı Başlat
+                  </>
+                )}
+              </button>
+            </div>
 
-          <div className="space-y-2">
-            {scheduledTimes.map((time, index) => (
-              <div key={index} className="flex items-center gap-2">
-                {editingIndex === index ? (
+            <div className="bg-telegram-card/50 backdrop-blur-sm border border-telegram-border/10 rounded-xl p-6 space-y-6">
+              <div className="flex items-center justify-between border-b border-telegram-border/10 pb-4">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <FiClock className="text-telegram-primary" />
+                  Gönderim Zamanları
+                </h2>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex gap-2">
                   <input
                     type="time"
-                    value={editingTime}
-                    onChange={(e) => setEditingTime(e.target.value)}
-                    className="flex-1 p-2 bg-telegram-input border border-telegram-border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={newTime}
+                    onChange={(e) => setNewTime(e.target.value)}
+                    className="flex-1 p-3 bg-telegram-dark/50 border border-telegram-border/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-telegram-primary/20 focus:border-transparent transition-all duration-200"
                   />
-                ) : (
-                  <div className="flex-1 p-2 bg-telegram-input border-b-2 border-telegram-border rounded-lg">
-                    {time}
-                  </div>
-                )}
+                  <button
+                    onClick={handleAddTime}
+                    className="px-6 bg-telegram-primary hover:bg-telegram-primary/90 rounded-lg font-medium transition-all duration-200"
+                  >
+                    Ekle
+                  </button>
+                </div>
 
-                {editingIndex === index ? (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleSaveEdit(index)}
-                      className="p-2 text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-all duration-200"
+                <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+                  {scheduledTimes.map((time, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-3 bg-telegram-dark/50 rounded-lg border border-telegram-border/10"
                     >
-                      <BsCheckCircleFill className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => handleCancelEdit()}
-                      className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-all duration-200"
-                    >
-                      <BsXCircleFill className="w-5 h-5" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleStartEdit(index, time)}
-                      className="p-2 text-blue-500 hover:bg-blue-500/10 rounded-lg transition-all duration-200"
-                    >
-                      <FiEdit2 className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteTime(index)}
-                      className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-all duration-200"
-                    >
-                      <FiTrash2 className="w-5 h-5" />
-                    </button>
-                  </div>
+                      <div className="flex items-center space-x-3">
+                        <FiClock className="w-5 h-5 text-telegram-secondary" />
+                        {editingIndex === index ? (
+                          <input
+                            type="time"
+                            value={editingTime}
+                            onChange={(e) => setEditingTime(e.target.value)}
+                            className="p-1 bg-telegram-dark border border-telegram-border/10 rounded focus:outline-none focus:ring-2 focus:ring-telegram-primary/20"
+                            autoFocus
+                          />
+                        ) : (
+                          <span className="text-telegram-secondary">
+                            {time}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {editingIndex === index ? (
+                          <>
+                            <button
+                              onClick={() => handleSaveEdit(index)}
+                              className="p-2 text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-all"
+                            >
+                              <FiCheck className="w-5 h-5" />
+                            </button>
+                            <button
+                              onClick={handleCancelEdit}
+                              className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
+                            >
+                              <FiX className="w-5 h-5" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => handleStartEdit(index, time)}
+                              className="p-2 text-telegram-secondary hover:text-telegram-primary hover:bg-telegram-primary/10 rounded-lg transition-all"
+                            >
+                              <FiEdit className="w-5 h-5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteTime(index)}
+                              className="p-2 text-telegram-secondary hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
+                            >
+                              <FiTrash2 className="w-5 h-5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {hasTimeChanges && (
+                  <button
+                    onClick={handleSaveTimes}
+                    className="w-full p-4 rounded-xl font-medium bg-emerald-500 hover:bg-emerald-600 transition-all duration-200 flex items-center justify-center gap-2"
+                  >
+                    <FiCheck className="w-5 h-5" />
+                    Zamanları Kaydet
+                  </button>
                 )}
               </div>
-            ))}
-          </div>
-
-          <button
-            onClick={handleSaveTimes}
-            disabled={!hasTimeChanges}
-            className={`w-full p-3 rounded-lg font-medium transition-all duration-200 ${
-              hasTimeChanges
-                ? "bg-emerald-600 hover:bg-emerald-500"
-                : "bg-gray-600 cursor-not-allowed"
-            }`}
-          >
-            Zamanları Kaydet
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-telegram-card border border-telegram-border rounded-lg p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-            <FaTelegramPlane className="text-blue-400" />
-            Telegram Bot Ayarları
-          </h2>
-          <div className="flex items-center gap-2">
-            <span
-              className={`w-3 h-3 rounded-full ${
-                isBotEnabled ? "bg-emerald-400" : "bg-red-500"
-              }`}
-            ></span>
-            <span className="text-sm text-gray-400">
-              {isBotEnabled ? "Aktif" : "Devre Dışı"}
-            </span>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1">
-              Bot Token
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="password"
-                value={botToken}
-                onChange={(e) => setBotToken(e.target.value)}
-                placeholder="Bot token'ınızı girin"
-                className="flex-1 bg-gray-700 text-white rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <button
-                onClick={handleSaveToken}
-                disabled={!botToken}
-                className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2
-                  ${
-                    botToken
-                      ? "bg-blue-500 hover:bg-blue-600"
-                      : "bg-gray-600 cursor-not-allowed"
-                  }`}
-              >
-                <FaSave />
-                Kaydet
-              </button>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-400">
-                  Bot Durumu
-                </span>
-                <span
-                  className={`text-sm ${
-                    isBotEnabled ? "text-green-400" : "text-red-400"
-                  }`}
-                >
-                  {isBotEnabled ? "Çalışıyor" : "Durduruldu"}
-                </span>
-              </div>
-              <button
-                onClick={handleToggleBot}
-                disabled={!botToken}
-                className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2
-                  ${
-                    !botToken
-                      ? "bg-gray-600 cursor-not-allowed"
-                      : isBotEnabled
-                      ? "bg-red-500 hover:bg-red-600"
-                      : "bg-green-500 hover:bg-green-600"
-                  }`}
-              >
-                {isBotEnabled ? (
-                  <>
-                    <FaStop />
-                    Durdur
-                  </>
-                ) : (
-                  <>
-                    <FaPlay />
-                    Başlat
-                  </>
-                )}
-              </button>
             </div>
 
-            {(botStatus?.lastError || botStatus?.lastSuccess) && (
-              <div className="mt-2 text-sm">
-                {botStatus?.lastError && (
-                  <div className="text-red-400 flex items-start gap-2">
-                    <FaExclamationCircle className="mt-1 flex-shrink-0" />
-                    <span>{botStatus.lastError}</span>
-                  </div>
-                )}
-                {botStatus?.lastSuccess && (
-                  <div className="text-green-400 flex items-start gap-2">
-                    <FaCheckCircle className="mt-1 flex-shrink-0" />
-                    <span>{botStatus.lastSuccess}</span>
-                  </div>
-                )}
+            <div className="bg-telegram-card/50 backdrop-blur-sm border border-telegram-border/10 rounded-xl p-6 space-y-6">
+              <div className="flex items-center justify-between border-b border-telegram-border/10 pb-4">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <FaTelegramPlane className="text-telegram-primary" />
+                  Bot Ayarları
+                </h2>
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      isBotEnabled ? "bg-emerald-400" : "bg-red-400"
+                    }`}
+                  />
+                  <span className="text-sm text-telegram-secondary">
+                    {isBotEnabled ? "Aktif" : "Devre Dışı"}
+                  </span>
+                </div>
               </div>
-            )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-telegram-secondary mb-2">
+                    Bot Token
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={botToken}
+                      onChange={(e) => setBotToken(e.target.value)}
+                      placeholder="Bot token'ınızı girin"
+                      className="flex-1 p-3 bg-telegram-dark/50 border border-telegram-border/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-telegram-primary/20 focus:border-transparent transition-all duration-200 placeholder:text-telegram-secondary/50"
+                    />
+                    <button
+                      onClick={handleSaveToken}
+                      disabled={!botToken}
+                      className={`px-6 rounded-lg font-medium transition-all duration-200 flex items-center gap-2
+                        ${
+                          botToken
+                            ? "bg-telegram-primary hover:bg-telegram-primary/90"
+                            : "bg-telegram-dark/50 cursor-not-allowed"
+                        }`}
+                    >
+                      <FiCheck className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-telegram-secondary">
+                        Bot Durumu
+                      </span>
+                      <span
+                        className={`text-sm ${
+                          isBotEnabled ? "text-emerald-400" : "text-red-400"
+                        }`}
+                      >
+                        {isBotEnabled ? "Çalışıyor" : "Durduruldu"}
+                      </span>
+                    </div>
+                    <button
+                      onClick={handleToggleBot}
+                      disabled={!botToken}
+                      className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2
+                        ${
+                          !botToken
+                            ? "bg-telegram-dark/50 cursor-not-allowed"
+                            : isBotEnabled
+                            ? "bg-red-500 hover:bg-red-600"
+                            : "bg-emerald-500 hover:bg-emerald-600"
+                        }`}
+                    >
+                      {isBotEnabled ? (
+                        <>
+                          <FaStopCircle className="w-5 h-5" />
+                          Durdur
+                        </>
+                      ) : (
+                        <>
+                          <FiPlayCircle className="w-5 h-5" />
+                          Başlat
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {(botStatus?.lastError || botStatus?.lastSuccess) && (
+                    <div className="mt-2 space-y-2">
+                      {botStatus?.lastError && (
+                        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                          <p className="text-sm text-red-400">
+                            {botStatus.lastError}
+                          </p>
+                        </div>
+                      )}
+                      {botStatus?.lastSuccess && (
+                        <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                          <p className="text-sm text-emerald-400">
+                            {botStatus.lastSuccess}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -761,4 +860,4 @@ const VideoManager = () => {
   );
 };
 
-export default VideoManager;
+export default React.memo(VideoManager);

@@ -63,7 +63,6 @@ class EmojiManager {
         this.store.set("channels", []);
       }
     } catch (error) {
-      console.error("Emoji Store initialization error:", error);
       throw error;
     }
   }
@@ -490,7 +489,6 @@ class EmojiManager {
 
       return result;
     } catch (error) {
-      console.error("getChannels hatası:", error);
       return {
         success: false,
         error: error.message,
@@ -514,10 +512,7 @@ class EmojiManager {
       channels.push(channelData);
       this.store.set("channels", channels);
 
-      return {
-        success: true,
-        channels: channels,
-      };
+      return { success: true };
     } catch (error) {
       return {
         success: false,
@@ -541,10 +536,7 @@ class EmojiManager {
       const updatedChannels = channels.filter((ch) => ch.id !== channelId);
       this.store.set("channels", updatedChannels);
 
-      return {
-        success: true,
-        channels: updatedChannels,
-      };
+      return { success: true };
     } catch (error) {
       return {
         success: false,

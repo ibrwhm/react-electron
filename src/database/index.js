@@ -1,14 +1,93 @@
-const mongoose = require('mongoose');
-require('dotenv').config();
+const mongoose = require("mongoose");
+const log = require("electron-log");
+require("dotenv").config();
 
-const connectDB = async () => {
-    try {
-        await mongoose.connect(process.env.MONGODB_URI);
-        console.log('MongoDB connected successfully');
-    } catch (error) {
-        console.error('MongoDB connection error:', error);
-        process.exit(1);
-    }
+const connectionOptions = {
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
+  family: 4,
+  maxPoolSize: 10,
+  minPoolSize: 2,
+  connectTimeoutMS: 10000,
+  heartbeatFrequencyMS: 30000,
 };
 
-module.exports = connectDB;
+const maxRetries = 3;
+const retryDelay = 5000;
+
+let retryCount = 0;
+let isConnected = false;
+
+mongoose.connection.on("connected", () => {
+  log.info("MongoDB bağlantısı başarılı");
+  isConnected = true;
+  retryCount = 0;
+});
+
+mongoose.connection.on("error", (err) => {
+  log.error("MongoDB bağlantı hatası:", err);
+  isConnected = false;
+});
+
+mongoose.connection.on("disconnected", () => {
+  log.warn("MongoDB bağlantısı kesildi");
+  isConnected = false;
+  if (retryCount < maxRetries) {
+    setTimeout(connectWithRetry, retryDelay);
+  }
+});
+
+mongoose.set("bufferCommands", false);
+
+const connectWithRetry = async () => {
+  try {
+    if (!isConnected) {
+      retryCount++;
+      log.info(
+        `MongoDB bağlantısı deneniyor... (Deneme ${retryCount}/${maxRetries})`
+      );
+      await mongoose.connect(process.env.MONGODB_URI, connectionOptions);
+    }
+  } catch (error) {
+    log.error(
+      `MongoDB bağlantı hatası (Deneme ${retryCount}/${maxRetries}):`,
+      error
+    );
+    if (retryCount < maxRetries) {
+      setTimeout(connectWithRetry, retryDelay);
+    } else {
+      log.error(
+        "MongoDB bağlantısı başarısız oldu, maksimum deneme sayısına ulaşıldı"
+      );
+      throw error;
+    }
+  }
+};
+
+const connectDB = async () => {
+  try {
+    await connectWithRetry();
+
+    process.on("SIGINT", async () => {
+      try {
+        await mongoose.connection.close();
+        log.info("MongoDB bağlantısı kapatıldı");
+        process.exit(0);
+      } catch (err) {
+        log.error("MongoDB bağlantısı kapatılırken hata:", err);
+        process.exit(1);
+      }
+    });
+  } catch (error) {
+    log.error("MongoDB bağlantısı başlatılamadı:", error);
+    throw error;
+  }
+};
+
+const isDBConnected = () => isConnected;
+
+module.exports = {
+  connectDB,
+  isDBConnected,
+  mongoose,
+};

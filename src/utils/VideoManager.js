@@ -14,9 +14,14 @@ class VideoManager {
     this.schedulerStatus = false;
     this.message = "";
     this.defaultTimes = ["09:00", "12:00", "15:00", "18:00", "21:00", "23:00"];
+    this.mainWindow = null;
 
     this.initStore();
     this.ensureDirectories();
+  }
+
+  setMainWindow(window) {
+    this.mainWindow = window;
   }
 
   async initStore() {
@@ -63,12 +68,6 @@ class VideoManager {
     }
   }
 
-  async ensureStore() {
-    if (!this.store) {
-      await this.initStore();
-    }
-  }
-
   async ensureDirectories() {
     await fs.ensureDir(this.videoDir);
     await fs.ensureDir(this.storeDir);
@@ -76,12 +75,10 @@ class VideoManager {
   }
 
   async getTimes() {
-    await this.ensureStore();
     return this.store.get("sendTimes") || [];
   }
 
   async saveTimes(newTimes) {
-    await this.ensureStore();
     try {
       const sortedTimes = (
         Array.isArray(newTimes) ? newTimes : [newTimes]
@@ -222,7 +219,6 @@ class VideoManager {
 
   async deleteVideo(channelId, videoId) {
     try {
-      await this.ensureStore();
       const videos = this.store.get("videos") || [];
       const channelIndex = videos.findIndex((c) => c._id === channelId);
 
@@ -235,11 +231,6 @@ class VideoManager {
       );
       if (videoIndex === -1) {
         throw new Error("Video bulunamadı");
-      }
-
-      const video = videos[channelIndex].videos[videoIndex];
-      if (video.savedPath && fs.existsSync(video.savedPath)) {
-        await fs.promises.unlink(video.savedPath);
       }
 
       videos[channelIndex].videos.splice(videoIndex, 1);
@@ -267,7 +258,6 @@ class VideoManager {
 
   async startScheduler() {
     try {
-      await this.ensureStore();
       const status = this.store.get("schedulerStatus");
 
       if (status) {
@@ -279,7 +269,6 @@ class VideoManager {
         this.schedulerInterval = null;
       }
 
-      await this.checkAndSendVideos();
       this.schedulerInterval = setInterval(
         () => this.checkAndSendVideos(),
         60000
@@ -295,7 +284,6 @@ class VideoManager {
 
   async stopScheduler() {
     try {
-      await this.ensureStore();
       const status = this.store.get("schedulerStatus");
 
       if (!status) {
@@ -318,51 +306,78 @@ class VideoManager {
 
   async checkAndSendVideos() {
     try {
-      await this.ensureStore();
       const now = new Date();
-      const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(
-        now.getMinutes()
-      ).padStart(2, "0")}`;
       const scheduledTimes = await this.getTimes();
 
-      if (!scheduledTimes.includes(currentTime)) {
-        return;
-      }
+      const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
 
-      const videos = this.store.get("videos", []);
-      let processedCount = 0;
+      for (const scheduledTime of scheduledTimes) {
+        const [hours, minutes] = scheduledTime.split(":").map(Number);
+        const scheduledMinutes = hours * 60 + minutes;
 
-      for (const channel of videos) {
-        const pendingVideos = channel.videos.filter(
-          (v) => v.status === "pending"
-        );
+        const lastSendTimeStr = this.store.get(`lastSendTime_${scheduledTime}`);
+        const lastSendDate = lastSendTimeStr ? new Date(lastSendTimeStr) : null;
 
-        if (pendingVideos.length > 0) {
-          const randomVideo =
-            pendingVideos[Math.floor(Math.random() * pendingVideos.length)];
+        if (
+          (!lastSendDate || !this.isSameDay(lastSendDate, now)) &&
+          Math.abs(scheduledMinutes - currentTimeMinutes) <= 1
+        ) {
+          const videos = this.store.get("videos", []);
+          let processedCount = 0;
 
-          try {
-            await this.sendToTelegram(channel.channelLink, randomVideo);
-            randomVideo.status = "sent";
-            randomVideo.sentAt = new Date().toISOString();
-            processedCount++;
-          } catch (error) {
-            randomVideo.status = "error";
-            randomVideo.error = error.message;
+          for (const channel of videos) {
+            const pendingVideos = channel.videos.filter(
+              (v) => v.status === "pending"
+            );
+
+            if (pendingVideos.length > 0) {
+              const randomVideo =
+                pendingVideos[Math.floor(Math.random() * pendingVideos.length)];
+
+              try {
+                await this.sendToTelegram(channel.channelLink, randomVideo);
+                const videoToUpdate = channel.videos.find(
+                  (v) => v._id === randomVideo._id
+                );
+                if (videoToUpdate) {
+                  videoToUpdate.status = "sent";
+                  videoToUpdate.sentAt = new Date().toISOString();
+                }
+                processedCount++;
+              } catch (error) {
+                console.error("Video gönderme hatası:", error);
+                const videoToUpdate = channel.videos.find(
+                  (v) => v._id === randomVideo._id
+                );
+                if (videoToUpdate) {
+                  videoToUpdate.status = "error";
+                  videoToUpdate.error = error.message;
+                }
+              }
+            }
+          }
+
+          if (processedCount > 0) {
+            this.store.set("videos", videos);
+            this.store.set(`lastSendTime_${scheduledTime}`, now.toISOString());
           }
         }
       }
-
-      if (processedCount > 0) {
-        this.store.set("videos", videos);
-      }
     } catch (error) {
+      console.error("Video gönderme hatası:", error);
       throw new Error("Zamanlayıcı kontrolü yapılırken hata: " + error.message);
     }
   }
 
+  isSameDay(date1, date2) {
+    return (
+      date1.getFullYear() === date2.getFullYear() &&
+      date1.getMonth() === date2.getMonth() &&
+      date1.getDate() === date2.getDate()
+    );
+  }
+
   async getTelegramSettings() {
-    await this.ensureStore();
     return (
       this.store.get("telegramBot") || {
         token: "",
@@ -374,7 +389,6 @@ class VideoManager {
   }
 
   async saveTelegramSettings(settings) {
-    await this.ensureStore();
     try {
       const currentSettings = await this.getTelegramSettings();
       const newSettings = {
@@ -429,7 +443,6 @@ class VideoManager {
 
   async sendToTelegram(channelLink, video) {
     try {
-      await this.ensureStore();
       const settings = await this.getTelegramSettings();
       if (!settings.isEnabled || !settings.token) {
         throw new Error("Telegram bot aktif değil veya token ayarlanmamış");

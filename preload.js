@@ -79,19 +79,17 @@ contextBridge.exposeInMainWorld("api", {
 
   showOpenDialog: (options) => ipcRenderer.invoke("show-open-dialog", options),
 
-  getReactionChannels: () => ipcRenderer.invoke("getReactionChannels"),
+  getChannelList: () => ipcRenderer.invoke("get-channel-list"),
   getEmojiList: () => ipcRenderer.invoke("get-emoji-list"),
   addEmoji: (emoji) => ipcRenderer.invoke("add-emoji", emoji),
   removeEmoji: (emoji) => ipcRenderer.invoke("remove-emoji", emoji),
-  addReactionChannel: (channelData) =>
-    ipcRenderer.invoke("addReactionChannel", channelData),
-  removeReactionChannel: (channelId) =>
-    ipcRenderer.invoke("removeReactionChannel", channelId),
+  addChannel: (channelData) => ipcRenderer.invoke("add-channel", channelData),
+  removeChannel: (channelId) => ipcRenderer.invoke("remove-channel", channelId),
   updateChannelStatus: (data) =>
-    ipcRenderer.invoke("updateChannelStatus", data),
+    ipcRenderer.invoke("update-channel-status", data),
   startReactionSystem: (channels) =>
-    ipcRenderer.invoke("startReactionSystem", channels),
-  stopReactionSystem: () => ipcRenderer.invoke("stopReactionSystem"),
+    ipcRenderer.invoke("start-reaction-system", channels),
+  stopReactionSystem: () => ipcRenderer.invoke("stop-reaction-system"),
 
   getSystemStatus: () => ipcRenderer.invoke("get-system-status"),
   getReactionLog: () => ipcRenderer.invoke("get-reaction-log"),
@@ -111,11 +109,10 @@ contextBridge.exposeInMainWorld("api", {
   saveTelegramSettings: (settings) =>
     ipcRenderer.invoke("save-telegram-settings", settings),
 
-  // Kanal Yönetimi API'leri
-  joinChannel: (channelName) => ipcRenderer.invoke("joinChannel", channelName),
+  joinChannel: (channelName) => ipcRenderer.invoke("join-channel", channelName),
   leaveChannel: (channelName) =>
-    ipcRenderer.invoke("leaveChannel", channelName),
-  leaveAllChannels: () => ipcRenderer.invoke("leaveAllChannels"),
+    ipcRenderer.invoke("leave-channel", channelName),
+  leaveAllChannels: () => ipcRenderer.invoke("leave-all-channels"),
 });
 
 contextBridge.exposeInMainWorld("electron", {

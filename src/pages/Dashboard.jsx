@@ -1,18 +1,21 @@
-import React, { useState, useEffect } from "react";
-import { format, differenceInDays } from "date-fns";
+import React, { useState, useEffect, useCallback } from "react";
+import { format, differenceInDays, isValid } from "date-fns";
 import { tr } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
 import { BsShieldCheck } from "react-icons/bs";
+import toast from "react-hot-toast";
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [systemInfo, setSystemInfo] = useState({
     licenseType: "",
     daysLeft: 0,
     totalDays: 365,
     sessions: 1,
-    lastLogin: new Date(),
+    lastLogin: null,
     deviceId: "",
     os: "",
     region: "TR",
@@ -24,87 +27,94 @@ const Dashboard = () => {
     sessionStartTime: new Date(),
   });
 
-  useEffect(() => {
-    const loadSystemInfo = async () => {
-      try {
-        const osInfo = await window.api.getSystemInfo();
-        const ipInfo = await window.api.getIpAddress();
-        const versionInfo = await window.api.getAppVersion();
-        const updateInfo = await window.api.checkForUpdates();
+  const loadAllData = useCallback(async () => {
+    try {
+      setError(null);
+      setIsLoading(true);
 
-        setSystemInfo((prev) => ({
-          ...prev,
-          os: osInfo?.os || "Bilinmiyor",
-          ipAddress: ipInfo?.ip || "Bilinmiyor",
-          version: versionInfo || "1.0.0",
-          updateAvailable: updateInfo?.available || false,
-        }));
-      } catch (error) {
-        throw error;
+      const licenseResponse = await window.api.getLicense();
+
+      if (!licenseResponse?.data) {
+        await window.api.logout();
+        navigate("/login", { replace: true });
+        return;
       }
-    };
 
-    loadSystemInfo();
-  }, []);
+      const license = licenseResponse.data;
 
-  useEffect(() => {
-    const loadLicense = async () => {
-      try {
-        const license = await window.api.getLicense();
-        if (!license) {
-          await window.api.logout();
-          navigate("/login", { replace: true });
-          return;
-        }
+      const [osInfo, ipInfo, versionInfo, updateInfo, sessionsInfo] =
+        await Promise.all([
+          window.api
+            .getSystemInfo()
+            .catch(() => ({ data: { os: "Bilinmiyor" } })),
+          window.api
+            .getIpAddress()
+            .catch(() => ({ data: { ip: "Bilinmiyor" } })),
+          window.api
+            .getAppVersion()
+            .catch(() => ({ data: { version: "1.0.0" } })),
+          window.api
+            .checkForUpdates()
+            .catch(() => ({ data: { available: false } })),
+          window.api.getSessions().catch(() => ({ data: { sessions: [] } })),
+        ]);
 
-        const expiryDate = new Date(license.expiresAt);
-        const startDate = new Date(license.createdAt);
-        const today = new Date();
+      const expiryDate = new Date(license.expiresAt);
+      const startDate = new Date(license.createdAt);
+      const today = new Date();
+      const lastLoginDate = license.lastLoginAt
+        ? new Date(license.lastLoginAt)
+        : new Date();
 
-        const daysLeft = differenceInDays(expiryDate, today);
-        const totalDays = differenceInDays(expiryDate, startDate);
-
-        setSystemInfo((prev) => ({
-          ...prev,
-          licenseType: license.type,
-          daysLeft,
-          totalDays,
-          lastLogin: new Date(license.lastLoginAt),
-          deviceId: license.hardwareId,
-          loginHistory: license.loginHistory || [],
-        }));
-      } catch (error) {
-        throw error;
+      if (
+        !isValid(expiryDate) ||
+        !isValid(startDate) ||
+        !isValid(lastLoginDate)
+      ) {
+        throw new Error("Geçersiz tarih değeri tespit edildi");
       }
-    };
 
-    loadLicense();
+      const daysLeft = differenceInDays(expiryDate, today);
+      const totalDays = differenceInDays(expiryDate, startDate);
+
+      let status = "active";
+      if (daysLeft <= 0) status = "expired";
+      else if (daysLeft <= 7) status = "warning";
+
+      setSystemInfo({
+        licenseType: license.type || "Standart",
+        daysLeft: Math.max(0, daysLeft),
+        totalDays,
+        lastLogin: lastLoginDate,
+        deviceId: license.hardwareId || "Bilinmiyor",
+        loginHistory: license.loginHistory || [],
+        os: osInfo?.data?.os || "Bilinmiyor",
+        ipAddress: ipInfo?.data?.ip || "Bilinmiyor",
+        version: versionInfo?.data?.version || "1.0.0",
+        updateAvailable: updateInfo?.data?.available || false,
+        sessions: sessionsInfo?.data?.sessions?.length || 0,
+        status,
+        sessionStartTime: new Date(),
+        region: "TR",
+      });
+    } catch (error) {
+      console.error("Veri yüklenirken hata:", error);
+      setError(error.message || "Veriler yüklenirken bir hata oluştu");
+      toast.error("Veriler yüklenirken bir hata oluştu");
+    } finally {
+      setIsLoading(false);
+    }
   }, [navigate]);
+
+  useEffect(() => {
+    loadAllData();
+  }, [loadAllData]);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
-
     return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    const getActiveSessions = async () => {
-      try {
-        const sessions = await window.api.getSessions();
-        if (sessions.success) {
-          setSystemInfo((prev) => ({
-            ...prev,
-            sessions: sessions.sessions.length || 0,
-          }));
-        }
-      } catch (error) {
-        console.error("Oturum bilgisi alınamadı:", error);
-      }
-    };
-
-    getActiveSessions();
   }, []);
 
   const getStatusColor = (status) => {
@@ -159,9 +169,49 @@ const Dashboard = () => {
     </div>
   );
 
+  const formatDate = (date) => {
+    if (!date || !isValid(date)) {
+      return "Bilinmiyor";
+    }
+    return format(date, "d MMM yyyy", { locale: tr });
+  };
+
+  const formatTime = (date) => {
+    if (!date || !isValid(date)) {
+      return "Bilinmiyor";
+    }
+    return format(date, "HH:mm");
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-telegram-dark">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-telegram-primary mx-auto"></div>
+          <p className="text-telegram-secondary mt-4">Yükleniyor...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-telegram-dark">
+        <div className="text-center p-6 bg-telegram-card rounded-lg">
+          <p className="text-red-500 mb-4">{error}</p>
+          <button
+            onClick={loadAllData}
+            className="px-4 py-2 bg-telegram-primary rounded-lg hover:bg-telegram-primary/90 transition-colors"
+          >
+            Tekrar Dene
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
-      {/* Hoş Geldiniz Kartı */}
       <div className="bg-telegram-card rounded-lg p-6">
         <div className="flex justify-between items-start">
           <div>
@@ -277,10 +327,10 @@ const Dashboard = () => {
                 Tarih & Saat
               </div>
               <div className="text-white">
-                {format(systemInfo.lastLogin, "d MMM yyyy", { locale: tr })}
+                {formatDate(systemInfo.lastLogin)}
               </div>
               <div className="text-telegram-primary font-medium">
-                {format(systemInfo.lastLogin, "HH:mm")}
+                {formatTime(systemInfo.lastLogin)}
               </div>
             </div>
 

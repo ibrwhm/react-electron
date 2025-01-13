@@ -44,18 +44,15 @@ const InviteManager = () => {
   const resetForm = () => {
     setSourceGroup("");
     setTargetGroup("");
-    setInviteLimit(4);
-    setFetchMethod("all");
     setMembers([]);
-    setProgress({ success: 0, fail: 0 });
-    setSystemActive(false);
-    setIsLoading(false);
+    setFetchMethod("all");
+    setInviteLimit(1);
+    resetInviteProgress();
   };
 
   const resetInviteProgress = () => {
-    setProgress({ success: 0, fail: 0 });
     setSystemActive(false);
-    setIsLoading(false);
+    setProgress({ success: 0, fail: 0 });
   };
 
   useEffect(() => {
@@ -73,6 +70,12 @@ const InviteManager = () => {
               success: data.success || prev.success,
               fail: data.fail || prev.fail,
             }));
+
+            if (data.finished) {
+              toast.success("Davet işlemi tamamlandı");
+              resetInviteProgress();
+              setSystemActive(false);
+            }
           }
         });
       }, 1000);
@@ -137,21 +140,7 @@ const InviteManager = () => {
       const result = await window.api.startInvite(
         sourceGroup,
         members,
-        inviteLimit,
-        (data) => {
-          if (data.success !== undefined) {
-            setProgress((prev) => ({
-              success: data.success || prev.success,
-              fail: data.fail || prev.fail,
-            }));
-          }
-
-          if (data.finished === true) {
-            toast.success(data.message || "Davet işlemi tamamlandı");
-            resetForm();
-            setSystemActive(false);
-          }
-        }
+        inviteLimit
       );
 
       if (!result.success) {

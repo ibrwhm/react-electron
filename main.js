@@ -1,9 +1,17 @@
 const { app, BrowserWindow, ipcMain, dialog, Tray, Menu } = require("electron");
 const { autoUpdater } = require("electron-updater");
+const { initialize, enable } = require("@electron/remote/main");
 const path = require("path");
 const log = require("electron-log");
 const fs = require("fs");
 const dotenv = require("dotenv");
+
+initialize();
+
+app.commandLine.appendSwitch("disable-http-cache", "true");
+app.commandLine.appendSwitch("ignore-gpu-blacklist", "true");
+app.commandLine.appendSwitch("enable-gpu-rasterization", "true");
+app.commandLine.appendSwitch("enable-zero-copy", "true");
 
 log.transports.file.level = "debug";
 log.transports.console.level = "debug";
@@ -46,18 +54,18 @@ function createSplashWindow() {
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: false,
+        backgroundThrottling: false,
       },
       center: true,
       icon: ICON_PATH,
     });
 
-    splashWindow.loadFile(SPLASH_PATH).catch((err) => {
-      log.error("Error loading splash window:", err);
-    });
+    enable(splashWindow.webContents);
+
+    splashWindow.loadFile(SPLASH_PATH);
 
     return splashWindow;
   } catch (error) {
-    log.error("Error in createSplashWindow:", error);
     return null;
   }
 }
@@ -75,10 +83,23 @@ function createWindow() {
         contextIsolation: true,
         enableRemoteModule: true,
         preload: PRELOAD_PATH,
-        webSecurity: false,
+        webSecurity: true,
+        backgroundThrottling: false,
+        spellcheck: false,
       },
-      backgroundColor: "#ffffff",
+      backgroundColor: "#1a1b1e",
     });
+
+    enable(mainWindow.webContents);
+
+    mainWindow.webContents.setVisualZoomLevelLimits(1, 1);
+    mainWindow.webContents.setZoomFactor(1);
+
+    setInterval(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.session.clearCache();
+      }
+    }, 1000 * 60 * 30);
 
     if (isDev) {
       mainWindow.loadURL("http://localhost:5173");
@@ -105,6 +126,12 @@ function createWindow() {
         mainWindow.webContents.openDevTools();
       }
     }
+
+    mainWindow.once("ready-to-show", () => {
+      splashWindow?.destroy();
+      mainWindow.show();
+      mainWindow.focus();
+    });
 
     return mainWindow;
   } catch (error) {
@@ -166,7 +193,7 @@ const databasePath = isDev
   ? path.join(__dirname, "src", "database")
   : path.join(__dirname, "src", "database");
 
-const connectDB = require(databasePath);
+const { connectDB } = require(databasePath);
 
 const SessionImporter = require("./src/utils/SessionImporter");
 const inviteManager = require("./src/utils/InviteManager");
@@ -295,676 +322,539 @@ function setupAutoUpdater() {
 }
 
 function setupIpcHandlers() {
-  ipcMain.handle("get-system-info", () => {
-    const platform = os.platform();
-    let osInfo = "";
-
-    switch (platform) {
-      case "win32":
-        osInfo = `Windows ${os.release()}`;
-        break;
-      case "darwin":
-        osInfo = `macOS ${os.release()}`;
-        break;
-      case "linux":
-        osInfo = `Linux ${os.release()}`;
-        break;
-      default:
-        osInfo = `${platform} ${os.release()}`;
-    }
-
-    return {
-      os: osInfo,
-      platform: platform,
-      arch: os.arch(),
-      version: os.version(),
-      release: os.release(),
-      totalMemory: os.totalmem(),
-      freeMemory: os.freemem(),
-      cpus: os.cpus(),
-      hostname: os.hostname(),
-      userInfo: os.userInfo(),
-      uptime: os.uptime(),
-    };
-  });
-
-  async function getPublicIp() {
-    try {
-      const response = await fetch("https://api.ipify.org?format=json");
-      const data = await response.json();
-      return data.ip;
-    } catch (error) {
-      log.error("IP adresi alınamadı:", error);
-      return null;
-    }
-  }
-
-  ipcMain.handle("get-ip-address", async () => {
-    try {
-      const publicIp = await getPublicIp();
-      if (publicIp) {
-        return { ip: publicIp };
+  const windowHandlers = {
+    "window-minimize": () => {
+      const win = BrowserWindow.getFocusedWindow();
+      if (win) win.minimize();
+    },
+    "window-maximize": () => {
+      const win = BrowserWindow.getFocusedWindow();
+      if (win) win.isMaximized() ? win.unmaximize() : win.maximize();
+    },
+    "window-close": () => {
+      const win = BrowserWindow.getFocusedWindow();
+      if (win) {
+        win.hide();
+        win.webContents.send("app-closing");
+        setTimeout(() => win.close(), 100);
       }
+    },
+  };
 
-      const nets = os.networkInterfaces();
-      let ip = "Bilinmiyor";
+  const systemHandlers = {
+    "get-system-info": async () => {
+      try {
+        const platform = os.platform();
+        const osInfo =
+          {
+            win32: `Windows ${os.release()}`,
+            darwin: `macOS ${os.release()}`,
+            linux: `Linux ${os.release()}`,
+          }[platform] || `${platform} ${os.release()}`;
 
-      for (const name of Object.keys(nets)) {
-        for (const net of nets[name]) {
-          if (net.family === "IPv4" && !net.internal) {
-            ip = net.address;
-            break;
-          }
-        }
+        return {
+          success: true,
+          data: {
+            os: osInfo,
+            platform,
+            arch: os.arch(),
+            totalMemory: os.totalmem(),
+            freeMemory: os.freemem(),
+            cpus: os.cpus(),
+            uptime: os.uptime(),
+          },
+        };
+      } catch (error) {
+        log.error("Sistem bilgisi alınırken hata:", error);
+        return { success: false, error: error.message };
       }
-
-      return { ip };
-    } catch (error) {
-      log.error("IP adresi alınamadı:", error);
-      return { ip: "Bilinmiyor" };
-    }
-  });
-
-  ipcMain.handle("get-upload-progress", () => {
-    return videoManager.getUploadProgress();
-  });
-
-  ipcMain.handle("get-app-version", () => {
-    return app.getVersion();
-  });
-
-  ipcMain.handle("check-for-updates", async () => {
-    try {
-      if (!app.isPackaged) {
+    },
+    "get-ip-address": async () => {
+      try {
+        const response = await fetch("https://api.ipify.org?format=json");
+        const data = await response.json();
+        return { success: true, data: { ip: data.ip } };
+      } catch (error) {
+        log.error("IP adresi alınamadı:", error);
         return {
           success: false,
-          message: "Geliştirme modunda güncelleme kontrolü yapılamaz",
+          data: { ip: "Bilinmiyor" },
+          error: error.message,
         };
       }
-      await autoUpdater.checkForUpdates();
-      return { success: true };
-    } catch (error) {
-      log.error("Manuel güncelleme kontrolü hatası:", error);
-      return { success: false, message: error.message };
-    }
-  });
-
-  ipcMain.handle("start-update", async () => {
-    return { success: true };
-  });
-
-  ipcMain.handle("window-minimize", () => {
-    const win = BrowserWindow.getFocusedWindow();
-    if (win) win.minimize();
-  });
-
-  ipcMain.handle("window-maximize", () => {
-    const win = BrowserWindow.getFocusedWindow();
-    if (win) {
-      if (win.isMaximized()) {
-        win.unmaximize();
-      } else {
-        win.maximize();
+    },
+    "get-app-version": async () => {
+      try {
+        const version = app.getVersion();
+        return { success: true, data: { version } };
+      } catch (error) {
+        log.error("Uygulama versiyonu alınamadı:", error);
+        return { success: false, error: error.message };
       }
-    }
-  });
+    },
+  };
 
-  ipcMain.handle("window-close", () => {
-    const win = BrowserWindow.getFocusedWindow();
-    if (win) {
-      win.hide();
-      win.webContents.send("app-closing");
-      setTimeout(() => {
-        win.close();
-      }, 100);
-    }
-  });
+  const licenseHandlers = {
+    "get-license": async () => {
+      try {
+        const storedKey = licenseManager.store.get("currentLicense");
+        if (!storedKey) return null;
 
-  ipcMain.on("window-is-maximized", (event) => {
-    event.returnValue = mainWindow.isMaximized();
-  });
-
-  ipcMain.handle("validate-license", async (_, key) => {
-    return await licenseManager.validateLicense(key);
-  });
-
-  ipcMain.handle("get-license", async () => {
-    try {
-      const storedKey = licenseManager.store.get("currentLicense");
-
-      if (!storedKey) {
+        const result = await licenseManager.validateLicense(storedKey);
+        return result.valid ? result.license : null;
+      } catch (error) {
+        log.error("Lisans kontrolü hatası:", error);
         return null;
       }
-
-      const result = await licenseManager.validateLicense(storedKey);
-
-      if (!result.valid) {
-        return null;
+    },
+    "create-license": async (_, type, months, customKey) => {
+      return await licenseManager.createLicense(type, months, customKey);
+    },
+    "get-all-licenses": async () => {
+      return await licenseManager.getAllLicenses();
+    },
+    "validate-license": async (_, key) => {
+      return await licenseManager.validateLicense(key);
+    },
+    "delete-license": async (_, key) => {
+      try {
+        await licenseManager.deleteLicense(key);
+        return { success: true };
+      } catch (error) {
+        return { success: false, message: error.message };
       }
+    },
+    "deactive-license": async (_, key) => {
+      try {
+        await licenseManager.deactivateLicense(key);
+        await licenseManager.clearStoredLicense();
 
-      return result.license;
-    } catch (error) {
-      return null;
-    }
-  });
-
-  ipcMain.handle("logout", async () => {
-    licenseManager.store.delete("currentLicense");
-    return true;
-  });
-
-  ipcMain.handle("create-license", async (_, type, months, customKey) => {
-    return await licenseManager.createLicense(type, months, customKey);
-  });
-
-  ipcMain.handle("get-all-licenses", async () => {
-    return await licenseManager.getAllLicenses();
-  });
-
-  ipcMain.handle("store-license", async (_, key) => {
-    try {
-      const result = await licenseManager.storeLicense(key);
-      if (!result.success) {
-        return { success: false, message: result.message };
+        return { success: true, message: "Lisans deaktif edildi" };
+      } catch (error) {
+        return { success: false, message: error.message };
       }
+    },
+    "store-license": async (_, key) => {
+      try {
+        const result = await licenseManager.storeLicense(key);
+        return result.success
+          ? { success: true }
+          : { success: false, message: result.message };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    },
+    "login-with-session": async () => {
+      try {
+        return await sessionManager.loginWithSessions();
+      } catch (error) {
+        return { success: false, message: error.message };
+      }
+    },
+    logout: async () => {
+      try {
+        await licenseManager.store.delete("currentLicense");
+        return true;
+      } catch (error) {
+        return false;
+      }
+    },
+  };
 
+  const emojiHandlers = {
+    "get-reaction-log": () => ({
+      success: true,
+      log: emojiManager.getReactionLog(),
+    }),
+    "get-system-status": () => ({
+      success: true,
+      isRunning: emojiManager.isListening,
+    }),
+    "get-emoji-list": async () => {
+      const result = await emojiManager.getEmojiList();
+      return result.success
+        ? { success: true, emojis: result.emojis }
+        : { success: false, error: result.error };
+    },
+    "add-emoji": async (_, emoji) => {
+      try {
+        const result = await emojiManager.addEmoji(emoji);
+
+        return result.success
+          ? { success: true, emojis: result.emojis }
+          : { success: false, error: result.error };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    },
+    "remove-emoji": async (_, emoji) => {
+      try {
+        const result = await emojiManager.removeEmoji(emoji);
+
+        return result.success
+          ? { success: true, emojis: result.emojis }
+          : { success: false, error: result.error };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    },
+    "get-channel-list": async () => {
+      try {
+        const result = await emojiManager.getChannels();
+
+        return result.success
+          ? { success: true, channels: result.channels }
+          : { success: false, error: result.error };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    },
+    "add-channel": async (_, channelData) => {
+      try {
+        const result = await emojiManager.addChannel(channelData);
+
+        return result.success
+          ? { success: true }
+          : { success: false, error: result.error };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    },
+    "remove-channel": async (_, channelId) => {
+      try {
+        const result = await emojiManager.removeChannel(channelId);
+
+        return result.success
+          ? { success: true }
+          : { success: false, error: result.error };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    },
+    "update-channel-status": async (_, { channelId, active }) => {
+      try {
+        const result = await emojiManager.updateChannelStatus({
+          channelId,
+          active,
+        });
+
+        return result.success
+          ? { success: true, channels: result.channels }
+          : { success: false, error: result.error };
+      } catch (error) {
+        return {
+          success: false,
+          error: error.message || "Kanal durumu güncellenirken bir hata oluştu",
+        };
+      }
+    },
+    "start-reaction-system": async (_, channels) => {
+      try {
+        return await emojiManager.startListening(channels);
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    },
+    "stop-reaction-system": async () => {
+      try {
+        return await emojiManager.stopListening();
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    },
+  };
+
+  const videoHandlers = {
+    "save-video": async (_, data) => {
+      return await videoManager.saveVideo(data);
+    },
+    "save-scheduler-times": async (_, times) => {
+      try {
+        return await videoManager.saveTimes(times);
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    },
+    "get-all-videos": async () => {
+      return await videoManager.getAllVideos();
+    },
+    "delete-video": async (_, channelId, videoId) => {
+      return await videoManager.deleteVideo(channelId, videoId);
+    },
+    "get-scheduler-status": async () => {
+      return await videoManager.getSchedulerStatus();
+    },
+    "get-scheduler-times": async () => {
+      return await videoManager.getTimes();
+    },
+    "start-scheduler": async () => {
+      return await videoManager.startScheduler();
+    },
+    "stop-scheduler": async () => {
+      return await videoManager.stopScheduler();
+    },
+    "get-upload-progress": async () => {
+      return await videoManager.getUploadProgress();
+    },
+    "get-telegram-settings": async () => {
+      return await videoManager.getTelegramSettings();
+    },
+    "save-telegram-settings": async (_, settings) => {
+      return await videoManager.saveTelegramSettings(settings);
+    },
+  };
+
+  const updateHandlers = {
+    "check-for-updates": async () => {
+      try {
+        if (!app.isPackaged) {
+          return {
+            success: false,
+            message: "Geliştirme modunda güncelleme kontrolü yapılamaz",
+          };
+        }
+
+        await autoUpdater.checkForUpdates();
+        return { success: true };
+      } catch (error) {
+        return { success: false, message: error.message };
+      }
+    },
+    "start-update": async () => {
       return { success: true };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
+    },
+    "start-update-download": async () => {
+      autoUpdater.downloadUpdate();
+    },
+    "quit-and-install": async () => {
+      autoUpdater.quitAndInstall();
+    },
+  };
 
-  ipcMain.handle("delete-license", async (_, key) => {
-    try {
-      await licenseManager.deleteLicense(key);
-      return { success: true };
-    } catch (error) {
-      return { success: false, message: error.message };
-    }
-  });
-
-  ipcMain.handle("deactivate-license", async (_, key) => {
-    try {
-      await licenseManager.deactivateLicense(key);
-      await licenseManager.clearStoredLicense();
-
-      return { success: true, message: "Lisans deaktif edildi" };
-    } catch (error) {
-      return { success: false, message: error.message };
-    }
-  });
-
-  ipcMain.handle("login-with-session", async () => {
-    try {
-      const result = await sessionManager.loginWithSessions();
-      return result;
-    } catch (error) {
-      return { success: false, message: error.message };
-    }
-  });
-
-  ipcMain.handle(
-    "fetch-members",
-    async (_, targetGroup, sourceGroup, fetchMethod) => {
+  const inviteHandlers = {
+    "fetch-members": async (_, targetGroup, sourceGroup, fetchMethod) => {
       try {
         await inviteManager.loginWithSessions();
-        const result = await inviteManager.fetchMembers(
+        return await inviteManager.fetchMembers(
           targetGroup,
           sourceGroup,
           fetchMethod
         );
-        return result;
       } catch (error) {
         return { success: false, message: error.message };
       }
-    }
-  );
+    },
+    "start-invite": async (_, targetGroup, members, limit) => {
+      try {
+        await inviteManager.loginWithSessions();
+        const result = await inviteManager.inviteUsers(
+          targetGroup,
+          members,
+          limit
+        );
 
-  ipcMain.handle("start-invite", async (_, targetGroup, members, limit) => {
-    try {
-      await inviteManager.loginWithSessions();
-      const result = await inviteManager.inviteUsers(
-        targetGroup,
-        members,
-        limit
-      );
+        mainWindow.webContents.send("invite-progress", {
+          success: result.success,
+          finished: true,
+          message: result.message,
+        });
 
-      mainWindow.webContents.send("invite-progress", {
-        success: result.success,
-        finished: true,
-        message: result.message,
-      });
-
-      return { success: true };
-    } catch (error) {
-      return { success: false, message: error.message };
-    }
-  });
-
-  ipcMain.handle("stop-invite", () => {
-    try {
-      inviteManager.stopInviteSystem();
-      mainWindow.webContents.send("invite-progress", {
-        success: true,
-        finished: true,
-        message: "Davet işlemi durduruldu",
-      });
-      return { success: true };
-    } catch (error) {
-      return { success: false, message: error.message };
-    }
-  });
-
-  ipcMain.handle("get-sessions", async () => {
-    try {
-      const sessions = await sessionManager.getSessions();
-      return { success: true, sessions };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle("delete-session", async (_, sessionId) => {
-    try {
-      const result = await sessionManager.deleteSession(sessionId);
-
-      if (result.success) {
         return { success: true };
-      } else return { success: false, error: result.error };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle("import-sessions", async (event, filePaths) => {
-    try {
-      const sessionImporter = new SessionImporter();
-
-      if (!Array.isArray(filePaths) || filePaths.length === 0) {
-        throw new Error("Dosya seçilmedi");
+      } catch (error) {
+        return { success: false, message: error.message };
       }
+    },
+    "stop-invite": async () => {
+      try {
+        inviteManager.stopInviteSystem();
 
-      if (filePaths.some((path) => !path || typeof path !== "string")) {
-        throw new Error("Geçersiz dosya yolu");
+        mainWindow.webContents.send("invite-progress", {
+          success: true,
+          finished: true,
+          message: "Davet işlemi durduruldu",
+        });
+
+        return { success: true };
+      } catch (error) {
+        return { success: false, message: error.message };
       }
+    },
+    "get-invite-progress": async () => {
+      try {
+        return inviteManager.inviteSystem.progress;
+      } catch (error) {
+        return null;
+      }
+    },
+  };
 
-      const result = await sessionImporter.importMultipleSessions(
-        filePaths,
-        (progress) => {
-          event.sender.send("import-progress", progress);
+  const sessionHandler = {
+    "get-sessions": async () => {
+      try {
+        const sessions = await sessionManager.getSessions();
+        return { success: true, sessions };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    },
+    "delete-session": async (_, sessionId) => {
+      try {
+        const result = await sessionManager.deleteSession(sessionId);
+
+        return result.success
+          ? { success: true }
+          : { success: false, error: result.error };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    },
+    "import-sessions": async (event, filePaths) => {
+      try {
+        const sessionImporter = new SessionImporter();
+
+        if (!Array.isArray(filePaths) || filePaths.length === 0) {
+          throw new Error("Dosya seçilmedi");
         }
-      );
 
-      return result;
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle("deleteSession", async (_, sessionId) => {
-    try {
-      await sessionManager.deleteSession(sessionId);
-      return { success: true };
-    } catch (error) {
-      return { success: false, message: error.message };
-    }
-  });
-
-  ipcMain.handle("startInvite", async (event, targetGroup, members, limit) => {
-    try {
-      await inviteManager.loginWithSessions();
-      const progressCallback = (progress) => {
-        event.sender.send("invite-progress", progress);
-
-        if (progress.finished) {
-          event.sender.send("invite-completed", {
-            success: progress.success,
-            fail: progress.fail,
-          });
+        if (filePaths.some((path) => !path || typeof path !== "string")) {
+          throw new Error("Geçersiz dosya yolu");
         }
-      };
 
-      const result = await inviteManager.inviteUsers(
-        targetGroup,
-        members,
-        limit,
-        progressCallback
-      );
-      return { success: true, ...result };
-    } catch (error) {
-      return { success: false, message: error.message };
-    }
-  });
+        return await sessionImporter.importMultipleSessions(
+          filePaths,
+          (progress) => {
+            event.sender.send("import-progress", progress);
+          }
+        );
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    },
+    "check-session": async () => {
+      try {
+        const sessionImporter = new SessionImporter();
+        const sessions = await sessionManager.getSessions();
 
-  ipcMain.handle("check-sessions", async () => {
-    try {
-      const sessions = await sessionManager.getSessions();
-      const sessionImporter = new SessionImporter();
+        const results = await sessionImporter.checkMultipleSessions(
+          sessions,
+          (progress) => {
+            mainWindow.webContents.send("check-progress", progress);
+          }
+        );
 
-      const results = await sessionImporter.checkMultipleSessions(
-        sessions,
-        (progress) => {
-          mainWindow.webContents.send("check-progress", progress);
+        return {
+          success: true,
+          results,
+        };
+      } catch (error) {
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+    },
+  };
+
+  const channelHandlers = {
+    "join-channel": async (_, channelName) => {
+      try {
+        const results = await channelManager.joinChannel(channelName);
+
+        if (results.failed > 0 && results.success === 0) {
+          return {
+            failed: results.failed,
+            success: results.success,
+            error: results.errors[0]?.error || "Bilinmeyen Hata!",
+          };
         }
-      );
 
-      return {
-        success: true,
-        results,
-      };
+        return results;
+      } catch (error) {
+        throw error;
+      }
+    },
+    "leave-channel": async (_, channelName) => {
+      try {
+        const results = await channelManager.leaveChannel(channelName);
+
+        if (results.failed > 0 && results.success === 0) {
+          return {
+            failed: results.failed,
+            success: results.success,
+            error: results.errors[0]?.error || "Bilinmeyen Hata!",
+          };
+        }
+
+        return results;
+      } catch (error) {
+        throw error;
+      }
+    },
+    "leave-all-channels": async () => {
+      try {
+        const results = await channelManager.leaveAllChannels();
+
+        if (results.failed > 0 && results.success === 0) {
+          return {
+            failed: results.failed,
+            success: results.success,
+            error: results.errors[0]?.error || "Bilinmeyen Hata!",
+          };
+        }
+
+        return results;
+      } catch (error) {
+        throw error;
+      }
+    },
+  };
+
+  const handleIpcError = (channel, error) => {
+    log.error(`Hata (${channel}):`, error);
+    return {
+      success: false,
+      error: error.message || "Bilinmeyen bir hata oluştu",
+    };
+  };
+
+  const registerHandlers = (handlers, category) => {
+    Object.entries(handlers).forEach(([channel, handler]) => {
+      ipcMain.handle(channel, async (...args) => {
+        try {
+          const result = await handler(...args);
+          if (result && typeof result === "object" && "success" in result) {
+            return result;
+          }
+          return { success: true, data: result };
+        } catch (error) {
+          return handleIpcError(`${category}:${channel}`, error);
+        }
+      });
+    });
+  };
+
+  registerHandlers(windowHandlers, "window");
+  registerHandlers(sessionHandler, "session");
+  registerHandlers(systemHandlers, "system");
+  registerHandlers(licenseHandlers, "license");
+  registerHandlers(emojiHandlers, "emoji");
+  registerHandlers(inviteHandlers, "invite");
+  registerHandlers(updateHandlers, "update");
+  registerHandlers(videoHandlers, "video");
+  registerHandlers(channelHandlers, "channel");
+
+  ipcMain.on("window-is-maximized", (event) => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      event.returnValue = win ? win.isMaximized() : false;
     } catch (error) {
-      return {
-        success: false,
-        error: error.message,
-      };
+      log.error("Hata (window-is-maximized):", error);
+      event.returnValue = false;
     }
   });
 
   ipcMain.handle("show-open-dialog", async (_, options) => {
-    const result = await dialog.showOpenDialog(options);
-
-    return result;
-  });
-
-  ipcMain.handle("get-reaction-log", () => {
-    try {
-      return {
-        success: true,
-        log: emojiManager.getReactionLog(),
-      };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle("get-system-status", () => {
-    try {
-      return {
-        success: true,
-        isRunning: emojiManager.isListening,
-      };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle("getReactionChannels", async () => {
-    try {
-      const result = await emojiManager.getChannels();
-
-      if (result.success) {
-        return { success: true, channels: result.channels };
-      } else {
-        console.error("IPC: Kanal getirme hatası:", result.error);
-        return { success: false, error: result.error };
-      }
-    } catch (error) {
-      console.error("IPC: getReactionChannels hatası:", error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle("get-emoji-list", async () => {
-    try {
-      const result = await emojiManager.getEmojiList();
-      if (result.success) {
-        return { success: true, emojis: result.emojis };
-      } else return { success: false, error: result.error };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle("add-emoji", async (_, emoji) => {
-    try {
-      const result = await emojiManager.addEmoji(emoji);
-      if (result.success) {
-        return { success: true, emojis: result.emojis };
-      } else return { success: false, error: result.error };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle("remove-emoji", async (_, emoji) => {
-    try {
-      const result = await emojiManager.removeEmoji(emoji);
-      if (result.success) return { success: true, emojis: result.emojis };
-      else return { success: false, error: result.error };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle("addReactionChannel", async (_, channelData) => {
-    try {
-      const result = await emojiManager.addChannel(channelData);
-      if (result.success) return { success: true };
-      else return { success: false, error: result.error };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle("removeReactionChannel", async (_, channelId) => {
-    try {
-      const result = await emojiManager.removeChannel(channelId);
-      if (result) return { success: true };
-      else return { success: false };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle("updateChannelStatus", async (_, { channelId, active }) => {
-    try {
-      const result = await emojiManager.updateChannelStatus({
-        channelId,
-        active,
-      });
-
-      if (result.success) {
-        return {
-          success: true,
-          channels: result.channels,
-        };
-      } else {
-        return {
-          success: false,
-          error: result.error,
-        };
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message || "Kanal durumu güncellenirken bir hata oluştu",
-      };
-    }
-  });
-
-  ipcMain.handle("startReactionSystem", async (_, channels) => {
-    try {
-      const result = await emojiManager.startListening(channels);
-      return result;
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle("stopReactionSystem", async () => {
-    try {
-      const result = await emojiManager.stopListening();
-      return result;
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle("save-video", async (_, data) => {
-    try {
-      return await videoManager.saveVideo(data);
-    } catch (error) {
-      console.error("Video kaydetme hatası:", error);
-      throw error;
-    }
-  });
-
-  ipcMain.handle("get-all-videos", async () => {
-    try {
-      return await videoManager.getAllVideos();
-    } catch (error) {
-      console.error("Video listesi alma hatası:", error);
-      throw error;
-    }
-  });
-
-  ipcMain.handle("delete-video", async (_, channelId, videoId) => {
-    try {
-      return await videoManager.deleteVideo(channelId, videoId);
-    } catch (error) {
-      console.error("Video silme hatası:", error);
-      throw error;
-    }
-  });
-
-  ipcMain.handle("get-scheduler-times", async () => {
-    try {
-      const times = await videoManager.getTimes();
-      return times;
-    } catch (error) {
-      throw error;
-    }
-  });
-
-  ipcMain.handle("save-scheduler-times", async (_, times) => {
-    try {
-      const savedTimes = await videoManager.saveTimes(times);
-      return savedTimes;
-    } catch (error) {
-      throw error;
-    }
-  });
-
-  ipcMain.handle("get-scheduler-status", async () => {
-    try {
-      return await videoManager.getSchedulerStatus();
-    } catch (error) {
-      console.error("Zamanlayıcı durumu alma hatası:", error);
-      throw error;
-    }
-  });
-
-  ipcMain.handle("start-scheduler", async () => {
-    try {
-      return await videoManager.startScheduler();
-    } catch (error) {
-      console.error("Zamanlayıcı başlatma hatası:", error);
-      throw error;
-    }
-  });
-
-  ipcMain.handle("stop-scheduler", async () => {
-    try {
-      return await videoManager.stopScheduler();
-    } catch (error) {
-      console.error("Zamanlayıcı durdurma hatası:", error);
-      throw error;
-    }
-  });
-
-  ipcMain.handle("get-telegram-settings", async () => {
-    try {
-      return await videoManager.getTelegramSettings();
-    } catch (error) {
-      console.error("Error getting Telegram settings:", error);
-      throw error;
-    }
-  });
-
-  ipcMain.handle("save-telegram-settings", async (event, settings) => {
-    try {
-      return await videoManager.saveTelegramSettings(settings);
-    } catch (error) {
-      console.error("Error saving Telegram settings:", error);
-      throw error;
-    }
-  });
-
-  ipcMain.handle("get-invite-progress", async () => {
-    try {
-      return inviteManager.inviteSystem.progress;
-    } catch (error) {
-      console.error("Error getting invite progress:", error);
-      return null;
-    }
-  });
-
-  ipcMain.handle("start-update-download", () => {
-    autoUpdater.downloadUpdate();
-  });
-
-  ipcMain.handle("quit-and-install", () => {
-    autoUpdater.quitAndInstall();
-  });
-
-  ipcMain.handle("joinChannel", async (_, channelName) => {
-    try {
-      const results = await channelManager.joinChannel(channelName);
-
-      if (results.failed > 0 && results.success === 0) {
-        throw new Error(
-          `${results.success} başarılı, ${
-            results.failed
-          } başarısız işlem. Hata: ${
-            results.errors[0]?.error || "Bilinmeyen hata"
-          }`
-        );
-      }
-
-      return results;
-    } catch (error) {
-      throw error;
-    }
-  });
-
-  ipcMain.handle("leaveChannel", async (_, channelName) => {
-    try {
-      const results = await channelManager.leaveChannel(channelName);
-
-      if (results.failed > 0 && results.success === 0) {
-        throw new Error(
-          `${results.success} başarılı, ${
-            results.failed
-          } başarısız işlem. Hata: ${
-            results.errors[0]?.error || "Bilinmeyen hata"
-          }`
-        );
-      }
-
-      return results;
-    } catch (error) {
-      throw error;
-    }
-  });
-
-  ipcMain.handle("leaveAllChannels", async (_) => {
-    try {
-      const results = await channelManager.leaveAllChannels();
-
-      if (results.failed > 0 && results.success === 0) {
-        throw new Error(
-          `${results.success} başarılı, ${
-            results.failed
-          } başarısız işlem. Hata: ${
-            results.errors[0]?.error || "Bilinmeyen hata"
-          }`
-        );
-      }
-
-      return results;
-    } catch (error) {
-      throw error;
-    }
+    return await dialog.showOpenDialog(options);
   });
 }
 

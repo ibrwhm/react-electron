@@ -32,7 +32,6 @@ class MongoDBSession extends MemorySession {
 
       return this;
     } catch (error) {
-      console.error("Session yükleme hatası:", error);
       throw error;
     }
   }

@@ -16,7 +16,7 @@ const ChannelManager = () => {
           setSessionCount(result.sessions.length);
         }
       } catch (error) {
-        console.error("Oturum sayısı alınamadı:", error);
+        throw new Error("Oturum sayısı alınamadı");
       }
     };
 

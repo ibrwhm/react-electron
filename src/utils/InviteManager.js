@@ -413,20 +413,14 @@ class InviteManager {
 
         switch (error.errorMessage) {
           case "USER_PRIVACY_RESTRICTED":
-            console.error(
-              `${user.username} kullanıcısının gizlilik ayarları bunu yapmanıza izin vermiyor.`
-            );
             break;
           case "USER_NOT_MUTUAL_CONTACT":
-            console.error(`${user.username} karşılıklı kişi listesinde değil.`);
             break;
           case "PEER_FLOOD":
-            console.error(`Spam koruması nedeniyle davet işlemi durduruldu.`);
             break;
           default:
-            console.error(
-              `Davet hatası (${user.username}):`,
-              error.errorMessage
+            throw new Error(
+              `Davet hatası (${user.username}): ${error.errorMessage}`
             );
         }
 

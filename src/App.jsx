@@ -1,42 +1,121 @@
-import React, { useState, useEffect } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
-import Layout from './components/Layout';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import InviteManager from './pages/InviteManager';
-import EmojiManager from './pages/EmojiManager';
-import VideoManager from './pages/VideoManager';
-import ChannelManager from './pages/ChannelManager';
-import LicenseManagement from './pages/LicenseManagement';
-import Settings from './pages/Settings';
-import SessionManager from './pages/SessionManager';
-import UpdateModal from '@/components/UpdateModal';
+import React, { useState, useEffect, Suspense, lazy } from "react";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import toast, { Toaster } from "react-hot-toast";
+import Layout from "./components/Layout";
+import Login from "./pages/Login";
+
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const InviteManager = lazy(() => import("./pages/InviteManager"));
+const EmojiManager = lazy(() => import("./pages/EmojiManager"));
+const VideoManager = lazy(() => import("./pages/VideoManager"));
+const ChannelManager = lazy(() => import("./pages/ChannelManager"));
+const LicenseManagement = lazy(() => import("./pages/LicenseManagement"));
+const Settings = lazy(() => import("./pages/Settings"));
+const SessionManager = lazy(() => import("./pages/SessionManager"));
+const UpdateModal = lazy(() => import("./components/UpdateModal"));
+
+const LoadingSpinner = () => (
+  <div className="flex items-center justify-center h-full">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+  </div>
+);
 
 function AuthCheck({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLogout, setIsLogout] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const license = await window.api.getLicense();
-        const isAuthed = !!license;
-        setIsAuthenticated(isAuthed);
+        setIsLoading(true);
 
-        if (!isAuthed && window.location.pathname !== '/login') {
-          navigate('/login');
+        if (isLogout) {
+          setIsAuthenticated(false);
+          return;
         }
+
+        const license = await window.api.getLicense();
+
+        if (!license) {
+          console.error("Lisans yanıtı alınamadı");
+          throw new Error("Lisans bilgisi alınamadı");
+        }
+
+        if (!license.data) {
+          console.error("Lisans verisi bulunamadı");
+          throw new Error("Lisans verisi bulunamadı");
+        }
+
+        if (!license.data.key) {
+          console.error("Lisans anahtarı bulunamadı");
+          throw new Error("Lisans anahtarı bulunamadı");
+        }
+
+        if (!license.data.isActive) {
+          console.error("Lisans aktif değil");
+          throw new Error("Lisans aktif değil");
+        }
+
+        const now = new Date();
+        const expiryDate = new Date(license.data.expiresAt);
+
+        if (isNaN(expiryDate.getTime())) {
+          console.error("Geçersiz bitiş tarihi");
+          throw new Error("Geçersiz lisans bitiş tarihi");
+        }
+
+        if (now > expiryDate) {
+          console.error("Lisans süresi dolmuş");
+          throw new Error("Lisans süresi dolmuş");
+        }
+
+        setIsAuthenticated(true);
       } catch (error) {
+        console.error("Auth check error:", error);
         setIsAuthenticated(false);
-        navigate('/login');
+        if (!isLogout) {
+          toast.error(error.message || "Kimlik doğrulama hatası");
+        }
+
+        if (window.location.pathname !== "/login") {
+          setTimeout(() => {
+            navigate("/login", { replace: true });
+          }, 100);
+        }
+      } finally {
+        setIsLoading(false);
       }
     };
 
     checkAuth();
-  }, [navigate]);
+  }, [navigate, isLogout]);
 
-  return children({ isAuthenticated });
+  const handleLogout = async () => {
+    try {
+      setIsLogout(true);
+      await window.api.logout();
+      toast.success("Başarıyla çıkış yapıldı");
+      navigate("/login", { replace: true });
+    } catch (error) {
+      console.error("Çıkış yapılırken hata:", error);
+      toast.error("Çıkış yapılırken bir hata oluştu");
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-telegram-dark">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-telegram-primary"></div>
+          <p className="text-telegram-secondary mt-4">Yükleniyor...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return children({ isAuthenticated, handleLogout });
 }
 
 function App() {
@@ -47,38 +126,99 @@ function App() {
         toastOptions={{
           duration: 3000,
           style: {
-            background: '#333',
-            color: '#fff',
+            background: "#333",
+            color: "#fff",
           },
           success: {
             iconTheme: {
-              primary: '#10B981',
-              secondary: '#fff',
+              primary: "#10B981",
+              secondary: "#fff",
             },
           },
           error: {
             iconTheme: {
-              primary: '#EF4444',
-              secondary: '#fff',
+              primary: "#EF4444",
+              secondary: "#fff",
             },
           },
         }}
       />
       <div className="flex flex-col h-screen">
         <AuthCheck>
-          {({ isAuthenticated }) => (
+          {({ isAuthenticated, handleLogout }) => (
             <Routes>
-              <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/" replace />} />
+              <Route
+                path="/login"
+                element={
+                  !isAuthenticated ? <Login /> : <Navigate to="/" replace />
+                }
+              />
               {isAuthenticated ? (
-                <Route element={<Layout />}>
-                  <Route index element={<Dashboard />} />
-                  <Route path="invites" element={<InviteManager />} />
-                  <Route path="emojis" element={<EmojiManager />} />
-                  <Route path="videos" element={<VideoManager />} />
-                  <Route path="channels" element={<ChannelManager />} />
-                  <Route path="licenses" element={<LicenseManagement />} />
-                  <Route path="settings" element={<Settings />} />
-                  <Route path="sessions" element={<SessionManager />} />
+                <Route element={<Layout onLogout={handleLogout} />}>
+                  <Route
+                    index
+                    element={
+                      <Suspense fallback={<LoadingSpinner />}>
+                        <Dashboard />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="invites"
+                    element={
+                      <Suspense fallback={<LoadingSpinner />}>
+                        <InviteManager />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="emojis"
+                    element={
+                      <Suspense fallback={<LoadingSpinner />}>
+                        <EmojiManager />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="videos"
+                    element={
+                      <Suspense fallback={<LoadingSpinner />}>
+                        <VideoManager />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="channels"
+                    element={
+                      <Suspense fallback={<LoadingSpinner />}>
+                        <ChannelManager />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="licenses"
+                    element={
+                      <Suspense fallback={<LoadingSpinner />}>
+                        <LicenseManagement />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="settings"
+                    element={
+                      <Suspense fallback={<LoadingSpinner />}>
+                        <Settings />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="sessions"
+                    element={
+                      <Suspense fallback={<LoadingSpinner />}>
+                        <SessionManager />
+                      </Suspense>
+                    }
+                  />
                 </Route>
               ) : (
                 <Route path="*" element={<Navigate to="/login" replace />} />
@@ -87,7 +227,9 @@ function App() {
           )}
         </AuthCheck>
       </div>
-      <UpdateModal />
+      <Suspense fallback={<LoadingSpinner />}>
+        <UpdateModal />
+      </Suspense>
     </>
   );
 }

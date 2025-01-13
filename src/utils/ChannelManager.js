@@ -135,10 +135,7 @@ class ChannelManager {
             );
             await sleep(this.delay);
           } catch (error) {
-            console.error(
-              `Kanal ayrılma hatası (${channel.title}):`,
-              error.message
-            );
+            throw new Error(`Kanal ayrılma hatası (${channel.title})`);
           }
         }
 
