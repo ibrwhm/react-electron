@@ -1,7 +1,7 @@
 {
   "name": "telegram-manager",
   "productName": "Telegram Manager",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "Telegram Manager",
   "author": {
     "name": "Rio",
@@ -86,7 +86,8 @@
       "owner": "ibrwhm",
       "repo": "react-electron",
       "private": false,
-      "releaseType": "release"
+      "releaseType": "release",
+      "publishAutoUpdate": true
     },
     "directories": {
       "output": "release",

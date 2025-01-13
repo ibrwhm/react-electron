@@ -751,6 +751,7 @@ app.whenReady().then(async () => {
       if (!isDev) {
         autoUpdater.autoDownload = true;
         autoUpdater.allowDowngrade = true;
+        autoUpdater.allowPrerelease = false;
 
         autoUpdater.setFeedURL({
           provider: 'github',
