@@ -59,12 +59,14 @@ const UpdateModal = () => {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Yeni Güncelleme Mevcut!</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-sm text-white">
             Versiyon {updateInfo?.version} yayınlandı.
             {updateInfo?.releaseNotes && (
               <div className="mt-2">
-                <h4 className="font-semibold">Güncelleme Notları:</h4>
-                <p className="text-sm">{updateInfo.releaseNotes}</p>
+                <h4 className="font-semibold text-white">
+                  Güncelleme Notları:
+                </h4>
+                <p className="text-sm text-white">{updateInfo.releaseNotes}</p>
               </div>
             )}
             {error && (
@@ -84,12 +86,20 @@ const UpdateModal = () => {
 
         <DialogFooter>
           {!downloading && (
-            <Button className="bg-telegram-primary hover:bg-telegram-primary-hover" onClick={() => setOpen(false)}>
+            <Button
+              className="bg-telegram-error hover:bg-telegram-error-hover"
+              onClick={() => setOpen(false)}
+            >
               Daha Sonra
             </Button>
           )}
           {!downloading && !error && (
-            <Button onClick={handleDownload}>Güncellemeyi İndir</Button>
+            <Button
+              className="bg-emerald-500 hover:bg-emerald-600"
+              onClick={handleDownload}
+            >
+              Güncellemeyi İndir
+            </Button>
           )}
           {error && <Button onClick={handleDownload}>Tekrar Dene</Button>}
           {downloaded && (
