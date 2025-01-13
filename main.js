@@ -183,7 +183,7 @@ function setupAutoUpdater() {
     // Hata durumunda kullanıcıya bilgi ver
     autoUpdater.on('error', (error) => {
       log.error('Güncelleme hatası:', error);
-      if (mainWindow) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('update-error', {
           message: 'Güncelleme indirilirken bir hata oluştu',
           error: error.message
@@ -192,18 +192,18 @@ function setupAutoUpdater() {
     });
 
     autoUpdater.on('checking-for-update', () => {
-      if (splashWindow) {
+      if (splashWindow && !splashWindow.isDestroyed()) {
         splashWindow.webContents.send('update-status', 'Güncellemeler kontrol ediliyor...');
       }
     });
 
     autoUpdater.on('update-available', async (info) => {
       try {
-        if (splashWindow) {
+        if (splashWindow && !splashWindow.isDestroyed()) {
           splashWindow.webContents.send('update-status', `Yeni sürüm bulundu: ${info.version}`);
         }
 
-        if (mainWindow) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('update-available', {
             version: info.version,
             releaseNotes: info.releaseNotes
@@ -215,41 +215,54 @@ function setupAutoUpdater() {
     });
 
     autoUpdater.on('update-not-available', () => {
-      if (splashWindow) {
+      if (splashWindow && !splashWindow.isDestroyed()) {
         splashWindow.webContents.send('update-status', 'Uygulama güncel');
         setTimeout(() => {
-          splashWindow.destroy();
-          if (mainWindow) mainWindow.show();
+          if (!splashWindow.isDestroyed()) {
+            splashWindow.destroy();
+          }
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.show();
+          }
         }, 1000);
       }
     });
 
     autoUpdater.on('download-progress', (progressObj) => {
-      if (splashWindow) {
+      if (splashWindow && !splashWindow.isDestroyed()) {
         splashWindow.webContents.send('update-status', `İndiriliyor... ${progressObj.percent.toFixed(2)}%`);
       }
-      if (mainWindow) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('download-progress', progressObj);
       }
     });
 
     autoUpdater.on('update-downloaded', () => {
-      if (splashWindow) {
+      if (splashWindow && !splashWindow.isDestroyed()) {
         splashWindow.webContents.send('update-status', 'Güncelleme hazır, yeniden başlatılıyor...');
       }
-      if (mainWindow) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('update-downloaded');
       }
     });
 
     // Her saat başı güncelleme kontrolü
-    setInterval(() => {
+    let updateCheckInterval = setInterval(() => {
       try {
-        autoUpdater.checkForUpdates();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          autoUpdater.checkForUpdates().catch(error => {
+            log.error('Periyodik güncelleme kontrolü hatası:', error);
+          });
+        }
       } catch (error) {
         log.error('Periyodik güncelleme kontrolü hatası:', error);
       }
     }, 60 * 60 * 1000);
+
+    // Uygulama kapanırken interval'i temizle
+    app.on('before-quit', () => {
+      clearInterval(updateCheckInterval);
+    });
   }
 }
 
