@@ -110,3 +110,27 @@ contextBridge.exposeInMainWorld("api", {
   saveTelegramSettings: (settings) =>
     ipcRenderer.invoke("save-telegram-settings", settings),
 });
+
+contextBridge.exposeInMainWorld('electron', {
+  on: (channel, callback) => {
+    const validChannels = [
+      'update-available',
+      'update-error',
+      'download-progress',
+      'update-downloaded'
+    ];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.on(channel, (event, ...args) => callback(...args));
+    }
+  },
+  invoke: (channel, ...args) => {
+    const validChannels = [
+      'start-update-download',
+      'quit-and-install'
+      // ... diğer kanallar ...
+    ];
+    if (validChannels.includes(channel)) {
+      return ipcRenderer.invoke(channel, ...args);
+    }
+  }
+});

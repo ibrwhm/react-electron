@@ -167,6 +167,92 @@ const videoManager = require("./src/utils/VideoManager");
 const emojiManager = require("./src/utils/EmojiManager");
 const sessionManager = require("./src/utils/SessionManager");
 
+function setupAutoUpdater() {
+  if (!isDev) {
+    autoUpdater.autoDownload = false;
+    autoUpdater.allowDowngrade = true;
+    autoUpdater.allowPrerelease = false;
+
+    autoUpdater.setFeedURL({
+      provider: 'github',
+      owner: 'ibrwhm',
+      repo: 'react-electron',
+      private: false
+    });
+
+    // Hata durumunda kullanıcıya bilgi ver
+    autoUpdater.on('error', (error) => {
+      log.error('Güncelleme hatası:', error);
+      if (mainWindow) {
+        mainWindow.webContents.send('update-error', {
+          message: 'Güncelleme indirilirken bir hata oluştu',
+          error: error.message
+        });
+      }
+    });
+
+    autoUpdater.on('checking-for-update', () => {
+      if (splashWindow) {
+        splashWindow.webContents.send('update-status', 'Güncellemeler kontrol ediliyor...');
+      }
+    });
+
+    autoUpdater.on('update-available', async (info) => {
+      try {
+        if (splashWindow) {
+          splashWindow.webContents.send('update-status', `Yeni sürüm bulundu: ${info.version}`);
+        }
+
+        if (mainWindow) {
+          mainWindow.webContents.send('update-available', {
+            version: info.version,
+            releaseNotes: info.releaseNotes
+          });
+        }
+      } catch (error) {
+        log.error('Güncelleme kontrolü hatası:', error);
+      }
+    });
+
+    autoUpdater.on('update-not-available', () => {
+      if (splashWindow) {
+        splashWindow.webContents.send('update-status', 'Uygulama güncel');
+        setTimeout(() => {
+          splashWindow.destroy();
+          if (mainWindow) mainWindow.show();
+        }, 1000);
+      }
+    });
+
+    autoUpdater.on('download-progress', (progressObj) => {
+      if (splashWindow) {
+        splashWindow.webContents.send('update-status', `İndiriliyor... ${progressObj.percent.toFixed(2)}%`);
+      }
+      if (mainWindow) {
+        mainWindow.webContents.send('download-progress', progressObj);
+      }
+    });
+
+    autoUpdater.on('update-downloaded', () => {
+      if (splashWindow) {
+        splashWindow.webContents.send('update-status', 'Güncelleme hazır, yeniden başlatılıyor...');
+      }
+      if (mainWindow) {
+        mainWindow.webContents.send('update-downloaded');
+      }
+    });
+
+    // Her saat başı güncelleme kontrolü
+    setInterval(() => {
+      try {
+        autoUpdater.checkForUpdates();
+      } catch (error) {
+        log.error('Periyodik güncelleme kontrolü hatası:', error);
+      }
+    }, 60 * 60 * 1000);
+  }
+}
+
 function setupIpcHandlers() {
   ipcMain.handle("get-system-info", () => {
     return {
@@ -715,77 +801,15 @@ function setupIpcHandlers() {
     }
   });
 
-  if (!isDev) {
-    autoUpdater.autoDownload = false;
-    autoUpdater.allowDowngrade = true;
-    autoUpdater.allowPrerelease = false;
+  // Güncelleme ile ilgili IPC handlers
+  ipcMain.handle('start-update-download', () => {
+    autoUpdater.downloadUpdate();
+  });
 
-    autoUpdater.setFeedURL({
-      provider: 'github',
-      owner: 'ibrwhm',
-      repo: 'react-electron',
-      private: false
-    });
-
-    // Hata durumunda kullanıcıya bilgi ver
-    autoUpdater.on('error', (error) => {
-      log.error('Güncelleme hatası:', error);
-      if (mainWindow) {
-        mainWindow.webContents.send('update-error', {
-          message: 'Güncelleme indirilirken bir hata oluştu',
-          error: error.message
-        });
-      }
-    });
-
-    // İndirme başlamadan önce kontrol
-    autoUpdater.on('update-available', async (info) => {
-      try {
-        // Release dosyasının varlığını kontrol et
-        const releaseUrl = `https://github.com/ibrwhm/react-electron/releases/download/v${info.version}/Telegram.Manager.Setup.${info.version}.exe`;
-
-        if (mainWindow) {
-          mainWindow.webContents.send('update-available', {
-            version: info.version,
-            releaseNotes: info.releaseNotes,
-            releaseUrl
-          });
-        }
-      } catch (error) {
-        log.error('Güncelleme kontrolü hatası:', error);
-      }
-    });
-
-    // Her saat başı güncelleme kontrolü
-    setInterval(() => {
-      try {
-        autoUpdater.checkForUpdates();
-      } catch (error) {
-        log.error('Periyodik güncelleme kontrolü hatası:', error);
-      }
-    }, 60 * 60 * 1000);
-
-    autoUpdater.on('download-progress', (progressObj) => {
-      if (mainWindow) {
-        mainWindow.webContents.send('download-progress', progressObj);
-      }
-    });
-
-    autoUpdater.on('update-downloaded', () => {
-      if (mainWindow) {
-        mainWindow.webContents.send('update-downloaded');
-      }
-    });
-
-    ipcMain.handle('start-update-download', () => {
-      autoUpdater.downloadUpdate();
-    });
-
-    ipcMain.handle('quit-and-install', () => {
-      autoUpdater.quitAndInstall();
-    });
-  }
-};
+  ipcMain.handle('quit-and-install', () => {
+    autoUpdater.quitAndInstall();
+  });
+}
 
 app.whenReady().then(async () => {
   try {
@@ -799,67 +823,11 @@ app.whenReady().then(async () => {
       throw new Error("Failed to create main window");
     }
 
+    setupAutoUpdater();
+    setupIpcHandlers();
+
     mainWindow.webContents.on('did-finish-load', async () => {
       if (!isDev) {
-        autoUpdater.autoDownload = true;
-        autoUpdater.allowDowngrade = true;
-        autoUpdater.allowPrerelease = false;
-
-        autoUpdater.setFeedURL({
-          provider: 'github',
-          owner: 'ibrwhm',
-          repo: 'react-electron',
-          private: false
-        });
-
-        autoUpdater.on('checking-for-update', () => {
-          if (splashWindow) {
-            splashWindow.webContents.send('update-status', 'Güncellemeler kontrol ediliyor...');
-          }
-        });
-
-        autoUpdater.on('update-available', (info) => {
-          if (splashWindow) {
-            splashWindow.webContents.send('update-status', `Yeni sürüm bulundu: ${info.version}`);
-          }
-        });
-
-        autoUpdater.on('update-not-available', () => {
-          if (splashWindow) {
-            splashWindow.webContents.send('update-status', 'Uygulama güncel');
-            setTimeout(() => {
-              splashWindow.destroy();
-              if (mainWindow) mainWindow.show();
-            }, 1000);
-          }
-        });
-
-        autoUpdater.on('error', (err) => {
-          log.error('Güncelleme hatası:', err);
-          if (splashWindow) {
-            splashWindow.webContents.send('update-status', 'Güncelleme hatası');
-            setTimeout(() => {
-              splashWindow.destroy();
-              if (mainWindow) mainWindow.show();
-            }, 1000);
-          }
-        });
-
-        autoUpdater.on('download-progress', (progressObj) => {
-          if (splashWindow) {
-            splashWindow.webContents.send('update-status', `İndiriliyor... ${progressObj.percent.toFixed(2)}%`);
-          }
-        });
-
-        autoUpdater.on('update-downloaded', () => {
-          if (splashWindow) {
-            splashWindow.webContents.send('update-status', 'Güncelleme hazır, yeniden başlatılıyor...');
-            setTimeout(() => {
-              autoUpdater.quitAndInstall();
-            }, 1000);
-          }
-        });
-
         try {
           await autoUpdater.checkForUpdates();
         } catch (updateError) {
@@ -878,8 +846,6 @@ app.whenReady().then(async () => {
     connectDB().catch((dbError) => {
       log.error("Database connection error:", dbError);
     });
-
-    setupIpcHandlers();
 
     try {
       createTray();
