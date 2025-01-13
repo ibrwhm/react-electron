@@ -55,7 +55,7 @@ const UpdateModal = () => {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog className="bg-telegram-dark" open={open} onOpenChange={setOpen}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Yeni Güncelleme Mevcut!</DialogTitle>
@@ -84,7 +84,7 @@ const UpdateModal = () => {
 
         <DialogFooter>
           {!downloading && (
-            <Button variant="outline" onClick={() => setOpen(false)}>
+            <Button onClick={() => setOpen(false)}>
               Daha Sonra
             </Button>
           )}

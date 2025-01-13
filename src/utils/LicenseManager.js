@@ -247,28 +247,49 @@ class LicenseManager {
 
   async getAllLicenses() {
     try {
+      console.log("getAllLicenses çağrıldı");
       const licenses = await LicenseModel.find();
+      console.log("Veritabanından gelen lisanslar:", licenses);
 
-      const formattedLicenses = licenses.reduce((acc, license) => {
-        acc[license.key] = {
-          key: license.key,
-          type: license.type,
-          isActive: license.isActive,
-          createdAt: license.createdAt.toISOString(),
-          expiresAt: license.expiresAt.toISOString(),
-          lastLoginAt: license.lastLoginAt
-            ? license.lastLoginAt.toISOString()
-            : null,
-        };
-        return acc;
-      }, {});
+      const formattedLicenses = licenses.map((license) => ({
+        key: license.key,
+        type: license.type,
+        isActive: license.isActive,
+        createdAt: license.createdAt.toISOString(),
+        expiresAt: license.expiresAt.toISOString(),
+        lastLoginAt: license.lastLoginAt
+          ? license.lastLoginAt.toISOString()
+          : null,
+        hardwareId: license.hardwareId,
+      }));
+
+      // Test lisanslarını diziye çevir
+      const testLicenseArray = Object.entries(this.testLicenses).map(
+        ([key, license]) => ({
+          ...license,
+          key,
+        })
+      );
+
+      console.log("Formatlanmış lisanslar:", formattedLicenses);
+      console.log("Test lisansları:", testLicenseArray);
+
+      // Tüm lisansları birleştir
+      const allLicenses = [...formattedLicenses, ...testLicenseArray];
 
       return {
-        ...formattedLicenses,
-        ...this.testLicenses,
+        success: true,
+        data: allLicenses,
       };
     } catch (error) {
-      return this.testLicenses;
+      console.error("getAllLicenses hatası:", error);
+      return {
+        success: true,
+        data: Object.entries(this.testLicenses).map(([key, license]) => ({
+          ...license,
+          key,
+        })),
+      };
     }
   }
 
