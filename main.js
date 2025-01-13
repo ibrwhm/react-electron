@@ -729,6 +729,52 @@ function setupIpcHandlers() {
       return null;
     }
   });
+
+  if (!isDev) {
+    autoUpdater.autoDownload = false;
+    autoUpdater.allowDowngrade = true;
+    autoUpdater.allowPrerelease = false;
+
+    autoUpdater.setFeedURL({
+      provider: 'github',
+      owner: 'ibrwhm',
+      repo: 'react-electron',
+      private: false
+    });
+
+    setInterval(() => {
+      autoUpdater.checkForUpdates();
+    }, 60 * 60 * 1000);
+
+    autoUpdater.on('update-available', (info) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('update-available', {
+          version: info.version,
+          releaseNotes: info.releaseNotes
+        });
+      }
+    });
+
+    autoUpdater.on('download-progress', (progressObj) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('download-progress', progressObj);
+      }
+    });
+
+    autoUpdater.on('update-downloaded', () => {
+      if (mainWindow) {
+        mainWindow.webContents.send('update-downloaded');
+      }
+    });
+
+    ipcMain.handle('start-update-download', () => {
+      autoUpdater.downloadUpdate();
+    });
+
+    ipcMain.handle('quit-and-install', () => {
+      autoUpdater.quitAndInstall();
+    });
+  }
 };
 
 app.whenReady().then(async () => {

@@ -11,6 +11,7 @@ import ChannelManager from './pages/ChannelManager';
 import LicenseManagement from './pages/LicenseManagement';
 import Settings from './pages/Settings';
 import SessionManager from './pages/SessionManager';
+import UpdateModal from '@/components/UpdateModal';
 
 function AuthCheck({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -86,6 +87,7 @@ function App() {
           )}
         </AuthCheck>
       </div>
+      <UpdateModal />
     </>
   );
 }
