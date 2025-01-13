@@ -14,9 +14,6 @@ const os = require("os");
 const envPath = isDev ? '.env' : path.join(process.resourcesPath, '.env');
 dotenv.config({ path: envPath });
 
-// Token kontrolü için log ekleyelim
-log.debug('GitHub Token:', process.env.GITHUB_TOKEN ? 'Mevcut' : 'Bulunamadı');
-
 const PRELOAD_PATH = isDev
   ? path.join(__dirname, "preload.js")
   : path.join(process.resourcesPath, "preload.js");
@@ -35,7 +32,6 @@ let splashWindow = null;
 
 function createSplashWindow() {
   try {
-    log.debug("Creating splash window...");
     splashWindow = new BrowserWindow({
       width: 400,
       height: 400,
@@ -50,7 +46,6 @@ function createSplashWindow() {
       icon: ICON_PATH
     });
 
-    log.debug("Loading splash window from:", SPLASH_PATH);
     splashWindow.loadFile(SPLASH_PATH).catch((err) => {
       log.error("Error loading splash window:", err);
     });
@@ -64,7 +59,6 @@ function createSplashWindow() {
 
 function createWindow() {
   try {
-    log.debug("Creating main window...");
     mainWindow = new BrowserWindow({
       width: 1200,
       height: 800,
@@ -87,7 +81,6 @@ function createWindow() {
     } else {
       try {
         const indexPath = path.join(process.resourcesPath, 'dist', 'index.html');
-        log.debug("Loading production index from:", indexPath);
 
         if (!fs.existsSync(indexPath)) {
           log.error("index.html not found at:", indexPath);
@@ -114,17 +107,11 @@ function createWindow() {
 function createTray() {
   try {
     if (tray) {
-      log.debug("Tray already exists, skipping creation");
       return;
     }
 
-    log.debug("Creating tray with icon:", ICON_PATH);
     try {
-      console.log("[debug] Icon path:", ICON_PATH);
-      console.log("[debug] Icon exists:", fs.existsSync(ICON_PATH));
-
       tray = new Tray(ICON_PATH);
-      console.log("[debug] Tray created successfully");
     } catch (error) {
       console.error("[error] Failed to create tray:", error);
     }
@@ -162,7 +149,6 @@ function createTray() {
       }
     });
 
-    log.debug("Tray created successfully");
   } catch (error) {
     log.error("Error in createTray:", error);
   }
@@ -172,7 +158,6 @@ const databasePath = isDev
   ? path.join(__dirname, "src", "database")
   : path.join(__dirname, "src", "database");
 
-log.debug("Database path:", databasePath);
 const connectDB = require(databasePath);
 
 const SessionImporter = require("./src/utils/SessionImporter");
@@ -742,18 +727,43 @@ function setupIpcHandlers() {
       private: false
     });
 
-    setInterval(() => {
-      autoUpdater.checkForUpdates();
-    }, 60 * 60 * 1000);
-
-    autoUpdater.on('update-available', (info) => {
+    // Hata durumunda kullanıcıya bilgi ver
+    autoUpdater.on('error', (error) => {
+      log.error('Güncelleme hatası:', error);
       if (mainWindow) {
-        mainWindow.webContents.send('update-available', {
-          version: info.version,
-          releaseNotes: info.releaseNotes
+        mainWindow.webContents.send('update-error', {
+          message: 'Güncelleme indirilirken bir hata oluştu',
+          error: error.message
         });
       }
     });
+
+    // İndirme başlamadan önce kontrol
+    autoUpdater.on('update-available', async (info) => {
+      try {
+        // Release dosyasının varlığını kontrol et
+        const releaseUrl = `https://github.com/ibrwhm/react-electron/releases/download/v${info.version}/Telegram.Manager.Setup.${info.version}.exe`;
+
+        if (mainWindow) {
+          mainWindow.webContents.send('update-available', {
+            version: info.version,
+            releaseNotes: info.releaseNotes,
+            releaseUrl
+          });
+        }
+      } catch (error) {
+        log.error('Güncelleme kontrolü hatası:', error);
+      }
+    });
+
+    // Her saat başı güncelleme kontrolü
+    setInterval(() => {
+      try {
+        autoUpdater.checkForUpdates();
+      } catch (error) {
+        log.error('Periyodik güncelleme kontrolü hatası:', error);
+      }
+    }, 60 * 60 * 1000);
 
     autoUpdater.on('download-progress', (progressObj) => {
       if (mainWindow) {
@@ -779,8 +789,6 @@ function setupIpcHandlers() {
 
 app.whenReady().then(async () => {
   try {
-    log.debug("App is ready, initializing...");
-
     splashWindow = createSplashWindow();
     if (!splashWindow) {
       throw new Error("Failed to create splash window");
@@ -792,8 +800,6 @@ app.whenReady().then(async () => {
     }
 
     mainWindow.webContents.on('did-finish-load', async () => {
-      log.debug('Main window finished loading');
-
       if (!isDev) {
         autoUpdater.autoDownload = true;
         autoUpdater.allowDowngrade = true;
