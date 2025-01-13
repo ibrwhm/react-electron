@@ -201,6 +201,10 @@ function setupAutoUpdater() {
       try {
         if (splashWindow && !splashWindow.isDestroyed()) {
           splashWindow.webContents.send('update-status', `Yeni sürüm bulundu: ${info.version}`);
+          // Splash ekranında otomatik indirmeyi başlat
+          autoUpdater.downloadUpdate().catch(error => {
+            log.error('Güncelleme indirme hatası:', error);
+          });
         }
 
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -240,9 +244,15 @@ function setupAutoUpdater() {
     autoUpdater.on('update-downloaded', () => {
       if (splashWindow && !splashWindow.isDestroyed()) {
         splashWindow.webContents.send('update-status', 'Güncelleme hazır, yeniden başlatılıyor...');
+        setTimeout(() => {
+          autoUpdater.quitAndInstall(true, true);
+        }, 2000);
       }
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('update-downloaded');
+        setTimeout(() => {
+          autoUpdater.quitAndInstall(true, true);
+        }, 2000);
       }
     });
 
