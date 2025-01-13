@@ -166,28 +166,25 @@ class EmojiManager {
   async processMessageQueue() {
     if (this.isProcessing || this.messageQueue.length === 0) return;
 
-    this.isProcessing = true;
-
     try {
+      this.isProcessing = true;
       const { message, channels } = this.messageQueue[0];
 
       const messageKey = `${message.peerId}_${message.id}`;
       if (this.reactedMessages.has(messageKey)) {
         this.messageQueue.shift();
         this.isProcessing = false;
-
         if (this.messageQueue.length > 0) {
           await this.processMessageQueue();
         }
-
         return;
       }
 
       for (const session of this.loggedInSessions) {
         try {
           if (!message?.peerId || !session?.sessionId) continue;
-          let messageChannel;
 
+          let messageChannel;
           try {
             messageChannel = await session.client.getEntity(message.peerId);
           } catch (error) {
@@ -213,6 +210,7 @@ class EmojiManager {
             session.client,
             message.peerId
           );
+
           if (!channelEmojis?.length) {
             this.addToReactionLog({
               channelId: targetChannel.id,
@@ -227,6 +225,7 @@ class EmojiManager {
 
           const randomEmoji =
             channelEmojis[Math.floor(Math.random() * channelEmojis.length)];
+
           await session.client.invoke(
             new Api.messages.SendReaction({
               peer: message.peerId,
@@ -242,26 +241,34 @@ class EmojiManager {
           this.addToReactionLog({
             channelId: targetChannel.id,
             channelTitle: targetChannel.title,
+            channelUsername: messageChannel.username,
             emoji: randomEmoji,
             timestamp: Date.now(),
             success: true,
+            sessionId: session.sessionId,
+            sessionPhone: session.phoneNumber,
           });
+
+          // Her session arasında 3 saniye bekle
+          await wait(3000);
         } catch (error) {
           this.addToReactionLog({
             channelId: message.peerId.toString(),
             channelTitle:
               channels.find((ch) => ch.id.includes(message.peerId.toString()))
                 ?.title || "Bilinmeyen Kanal",
+            channelUsername: messageChannel?.username || "Bilinmeyen",
             emoji: "❌",
             timestamp: Date.now(),
             success: false,
             error: `Emoji gönderilemedi: ${error.message}`,
+            sessionId: session.sessionId,
+            sessionPhone: session.phoneNumber,
           });
         }
       }
 
-      await wait(2000);
-      this.reactedMessages.add(`${message.peerId}_${message.id}`);
+      this.reactedMessages.add(messageKey);
       this.messageQueue.shift();
     } catch (error) {
       throw new Error("Process message queue error");
@@ -413,19 +420,42 @@ class EmojiManager {
     }
   }
 
-  async updateChannelStatus(channels) {
+  async updateChannelStatus({ channelId, active }) {
     try {
+      const result = await this.getChannels();
+      if (!result.success) {
+        return {
+          success: false,
+          error: "Kanal listesi alınamadı",
+        };
+      }
+
+      const channels = result.channels;
+      const updatedChannels = channels.map((ch) =>
+        ch.id === channelId ? { ...ch, active } : ch
+      );
+
+      this.store.set("channels", updatedChannels);
+
+      // Event handler'ları ve cache'i temizle
       this.clearEventHandlers();
       this.clearReactedMessages();
       this.emojiCache.clear();
 
+      // Dinleme aktifse yeni kanallarla tekrar başlat
       if (this.isListening) {
-        this.startMessageListener(channels);
+        this.startMessageListener(updatedChannels);
       }
 
-      return { success: true };
+      return {
+        success: true,
+        channels: updatedChannels,
+      };
     } catch (error) {
-      return { success: false, error: error.message };
+      return {
+        success: false,
+        error: error.message || "Kanal durumu güncellenirken bir hata oluştu",
+      };
     }
   }
 
@@ -449,69 +479,107 @@ class EmojiManager {
   }
 
   async getChannels() {
-    const getChannels = this.store.get("channels") || [];
+    try {
+      const rawData = this.store.get("channels");
+      const channels = Array.isArray(rawData) ? rawData : [];
 
-    return {
-      success: true,
-      channels: getChannels,
-    };
+      const result = {
+        success: true,
+        channels: channels,
+      };
+
+      return result;
+    } catch (error) {
+      console.error("getChannels hatası:", error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
   }
 
   async addChannel(channelData) {
-    const channelList = this.getChannels();
+    try {
+      const currentChannels = this.store.get("channels") || [];
 
-    if (channelList.some((channel) => channel.id === channelData.id)) {
-      return {
-        success: false,
-        error: "Bu kanal zaten ekli",
-      };
-    } else {
-      this.store.set("channels", [...channelList, channelData]);
+      const channels = Array.isArray(currentChannels) ? currentChannels : [];
+
+      if (channels.some((channel) => channel.id === channelData.id)) {
+        return {
+          success: false,
+          error: "Bu kanal zaten ekli",
+        };
+      }
+
+      channels.push(channelData);
+      this.store.set("channels", channels);
+
       return {
         success: true,
-        channels: [...channelList, channelData],
+        channels: channels,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message || "Kanal eklenirken bir hata oluştu",
       };
     }
   }
 
   async removeChannel(channelId) {
-    const channelList = this.getChannels();
-    if (!channelList) {
+    try {
+      const result = await this.getChannels();
+      const channels = result.channels;
+
+      if (!channels || channels.length === 0) {
+        return {
+          success: false,
+          error: "Kanal listesi bulunamadı",
+        };
+      }
+
+      const updatedChannels = channels.filter((ch) => ch.id !== channelId);
+      this.store.set("channels", updatedChannels);
+
+      return {
+        success: true,
+        channels: updatedChannels,
+      };
+    } catch (error) {
       return {
         success: false,
-        error: "Kanal listesi bulunamadı",
+        error: error.message || "Kanal silinirken bir hata oluştu",
       };
     }
-
-    if (!channelList.includes(channelId)) {
-      return {
-        success: false,
-        error: "Bu kanal bulunamadı",
-      };
-    }
-
-    this.store.set(
-      "channels",
-      channelList.filter((ch) => ch.id !== channelId)
-    );
-
-    return {
-      success: true,
-      channels: channelList,
-    };
   }
 
   async updateChannel(channelId, updates) {
-    const currentChannels = this.getChannels();
-    const updatedChannels = currentChannels.map((ch) =>
-      ch.id === channelId ? { ...ch, ...updates } : ch
-    );
-    this.store.set("channels", updatedChannels);
+    try {
+      const result = await this.getChannels();
+      if (!result.success) {
+        return {
+          success: false,
+          error: "Kanal listesi alınamadı",
+        };
+      }
 
-    return {
-      success: true,
-      channels: updatedChannels,
-    };
+      const channels = result.channels;
+      const updatedChannels = channels.map((ch) =>
+        ch.id === channelId ? { ...ch, ...updates } : ch
+      );
+
+      this.store.set("channels", updatedChannels);
+
+      return {
+        success: true,
+        channels: updatedChannels,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message || "Kanal güncellenirken bir hata oluştu",
+      };
+    }
   }
 }
 

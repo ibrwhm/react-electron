@@ -119,13 +119,14 @@
 
 <body>
     <div class="splash-container">
-        <img src="build/icon.ico" alt="Logo" class="logo">
+        <img src="build/icon.png" alt="Logo" class="logo">
         <h1 class="title">Telegram Manager</h1>
         <div id="status" class="status">Yükleniyor...</div>
         <div class="progress-bar">
             <div class="progress"></div>
         </div>
     </div>
+
     <script>
         const { ipcRenderer } = require('electron');
         const status = document.getElementById('status');

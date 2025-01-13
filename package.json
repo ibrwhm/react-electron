@@ -1,7 +1,7 @@
 {
   "name": "telegram-manager",
   "productName": "Telegram Manager",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "description": "Telegram Manager",
   "author": {
     "name": "Rio",
@@ -18,7 +18,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "concurrently \"npm run dev\" \"electron .\"",
+    "start": "cross-env NODE_ENV=development concurrently \"npm run dev\" \"electron .\"",
     "electron:build": "electron-builder",
     "pack": "rimraf release && npm run build && cross-env NODE_ENV=production electron-builder build --win",
     "postinstall": "electron-builder install-app-deps"
@@ -135,7 +135,7 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "build/icon.ico",
+      "icon": "build/icon.png",
       "artifactName": "Telegram.Manager.Setup.${version}.exe"
     }
   }

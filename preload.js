@@ -97,6 +97,7 @@ contextBridge.exposeInMainWorld("api", {
   getReactionLog: () => ipcRenderer.invoke("get-reaction-log"),
 
   saveVideo: (data) => ipcRenderer.invoke("save-video", data),
+  getUploadProgress: () => ipcRenderer.invoke("get-upload-progress"),
   getAllVideos: () => ipcRenderer.invoke("get-all-videos"),
   deleteVideo: (channelId, videoId) =>
     ipcRenderer.invoke("delete-video", channelId, videoId),
@@ -109,15 +110,21 @@ contextBridge.exposeInMainWorld("api", {
   getTelegramSettings: () => ipcRenderer.invoke("get-telegram-settings"),
   saveTelegramSettings: (settings) =>
     ipcRenderer.invoke("save-telegram-settings", settings),
+
+  // Kanal Yönetimi API'leri
+  joinChannel: (channelName) => ipcRenderer.invoke("joinChannel", channelName),
+  leaveChannel: (channelName) =>
+    ipcRenderer.invoke("leaveChannel", channelName),
+  leaveAllChannels: () => ipcRenderer.invoke("leaveAllChannels"),
 });
 
-contextBridge.exposeInMainWorld('electron', {
+contextBridge.exposeInMainWorld("electron", {
   on: (channel, callback) => {
     const validChannels = [
-      'update-available',
-      'update-error',
-      'download-progress',
-      'update-downloaded'
+      "update-available",
+      "update-error",
+      "download-progress",
+      "update-downloaded",
     ];
     if (validChannels.includes(channel)) {
       ipcRenderer.on(channel, (event, ...args) => callback(...args));
@@ -125,12 +132,12 @@ contextBridge.exposeInMainWorld('electron', {
   },
   invoke: (channel, ...args) => {
     const validChannels = [
-      'start-update-download',
-      'quit-and-install'
+      "start-update-download",
+      "quit-and-install",
       // ... diğer kanallar ...
     ];
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args);
     }
-  }
+  },
 });

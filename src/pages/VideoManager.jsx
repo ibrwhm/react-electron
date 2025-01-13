@@ -1,32 +1,71 @@
-import React, { useState, useEffect } from 'react';
-import { FiUpload, FiTrash2, FiEdit2 } from 'react-icons/fi';
-import { BiLoaderAlt } from 'react-icons/bi';
-import { BsCheckCircleFill, BsXCircleFill, BsClock, BsStopFill, BsPlayFill } from 'react-icons/bs';
-import { FaTelegramPlane, FaSave, FaStop, FaPlay, FaExclamationCircle, FaCheckCircle } from 'react-icons/fa';
-import toast from 'react-hot-toast';
+import React, { useState, useEffect, useRef } from "react";
+import { FiUpload, FiTrash2, FiEdit2 } from "react-icons/fi";
+import { BiLoaderAlt } from "react-icons/bi";
+import {
+  BsCheckCircleFill,
+  BsXCircleFill,
+  BsClock,
+  BsStopFill,
+  BsPlayFill,
+} from "react-icons/bs";
+import {
+  FaTelegramPlane,
+  FaSave,
+  FaStop,
+  FaPlay,
+  FaExclamationCircle,
+  FaCheckCircle,
+} from "react-icons/fa";
+import toast from "react-hot-toast";
 
 const { api } = window;
 
 const VideoManager = () => {
   const [channels, setChannels] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState([]);
-  const [description, setDescription] = useState('');
-  const [channelLink, setChannelLink] = useState('');
+  const [description, setDescription] = useState("");
+  const [channelLink, setChannelLink] = useState("");
   const [scheduledTimes, setScheduledTimes] = useState([]);
   const [isSchedulerRunning, setIsSchedulerRunning] = useState(false);
-  const [schedulerMessage, setSchedulerMessage] = useState('');
-  const [newTime, setNewTime] = useState('');
+  const [schedulerMessage, setSchedulerMessage] = useState("");
+  const [newTime, setNewTime] = useState("");
   const [editingIndex, setEditingIndex] = useState(null);
-  const [editingTime, setEditingTime] = useState('');
+  const [editingTime, setEditingTime] = useState("");
   const [hasTimeChanges, setHasTimeChanges] = useState(false);
-  const [botToken, setBotToken] = useState('');
+  const [botToken, setBotToken] = useState("");
   const [isBotEnabled, setIsBotEnabled] = useState(false);
   const [botStatus, setBotStatus] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null);
+  const progressInterval = useRef(null);
 
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (progressInterval.current) {
+        clearInterval(progressInterval.current);
+      }
+    };
+  }, []);
+
+  const startProgressTracking = () => {
+    if (progressInterval.current) {
+      clearInterval(progressInterval.current);
+    }
+
+    progressInterval.current = setInterval(async () => {
+      const progress = await api.getUploadProgress();
+      setUploadProgress(progress);
+
+      if (progress.status === "tamamlandı" || progress.status === "hata") {
+        clearInterval(progressInterval.current);
+        progressInterval.current = null;
+      }
+    }, 500);
+  };
 
   const loadInitialData = async () => {
     try {
@@ -40,38 +79,41 @@ const VideoManager = () => {
       const status = await api.getSchedulerStatus();
       setIsSchedulerRunning(status);
 
-      const telegramSettings = await api.getTelegramSettings() || {
-        token: '',
+      const telegramSettings = (await api.getTelegramSettings()) || {
+        token: "",
         isEnabled: false,
-        lastError: '',
-        lastSuccess: ''
+        lastError: "",
+        lastSuccess: "",
       };
 
-      setBotToken(telegramSettings.token || '');
+      setBotToken(telegramSettings.token || "");
       setIsBotEnabled(telegramSettings.isEnabled || false);
       setBotStatus({
-        error: telegramSettings.lastError || '',
-        success: telegramSettings.lastSuccess || ''
+        error: telegramSettings.lastError || "",
+        success: telegramSettings.lastSuccess || "",
       });
     } catch (error) {
-      console.error('Veriler yüklenirken hata oluştu:', error);
+      console.error("Veriler yüklenirken hata oluştu:", error);
     }
   };
 
   const handleFileSelect = async () => {
     try {
       const result = await api.showOpenDialog({
-        properties: ['openFile', 'multiSelections'],
-        filters: [{ name: 'Video Files', extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv'] }]
+        properties: ["openFile", "multiSelections"],
+        filters: [
+          {
+            name: "Video Files",
+            extensions: ["mp4", "avi", "mkv", "mov", "wmv"],
+          },
+        ],
       });
-
-      console.log(result)
 
       if (!result.filePaths || result.filePaths.length === 0) return;
 
       setSelectedFiles(result.filePaths);
     } catch (error) {
-      console.error('Dosya seçiminde hata:', error);
+      console.error("Dosya seçiminde hata:", error);
     }
   };
 
@@ -80,26 +122,29 @@ const VideoManager = () => {
 
     try {
       setIsUploading(true);
+      startProgressTracking();
 
       for (const filePath of selectedFiles) {
         const result = await api.saveVideo({
           filePath: filePath,
           description: description,
-          channelLink: channelLink
+          channelLink: channelLink,
         });
 
         if (result.success) {
-          setDescription('');
-          setChannelLink('');
+          setDescription("");
+          setChannelLink("");
         }
       }
 
       setSelectedFiles([]);
       await loadInitialData();
     } catch (error) {
-      console.error('Video yükleme hatası:', error);
+      console.error("Video yükleme hatası:", error);
+      toast.error(error.message);
     } finally {
       setIsUploading(false);
+      setTimeout(() => setUploadProgress(null), 3000);
     }
   };
 
@@ -107,12 +152,16 @@ const VideoManager = () => {
     try {
       await api.deleteVideo(channelId, videoId);
 
-      setChannels(prev => {
+      setChannels((prev) => {
         const updatedChannels = [...prev];
-        const channelIndex = updatedChannels.findIndex(c => c._id === channelId);
+        const channelIndex = updatedChannels.findIndex(
+          (c) => c._id === channelId
+        );
 
         if (channelIndex !== -1) {
-          updatedChannels[channelIndex].videos = updatedChannels[channelIndex].videos.filter(v => v._id !== videoId);
+          updatedChannels[channelIndex].videos = updatedChannels[
+            channelIndex
+          ].videos.filter((v) => v._id !== videoId);
 
           if (updatedChannels[channelIndex].videos.length === 0) {
             updatedChannels.splice(channelIndex, 1);
@@ -122,18 +171,18 @@ const VideoManager = () => {
         return updatedChannels;
       });
 
-      toast.success('Video başarıyla silindi!');
+      toast.success("Video başarıyla silindi!");
     } catch (error) {
-      console.error('Video silinirken hata:', error);
-      toast.error('Video silinirken hata oluştu!');
+      console.error("Video silinirken hata:", error);
+      toast.error("Video silinirken hata oluştu!");
     }
   };
 
   const handleAddTime = () => {
     if (!newTime || scheduledTimes.includes(newTime)) return;
 
-    setScheduledTimes(prev => [...prev, newTime]);
-    setNewTime('');
+    setScheduledTimes((prev) => [...prev, newTime]);
+    setNewTime("");
     setHasTimeChanges(true);
   };
 
@@ -143,12 +192,12 @@ const VideoManager = () => {
   };
 
   const handleSaveEdit = (index) => {
-    if (!editingTime || (editingTime === scheduledTimes[index])) {
+    if (!editingTime || editingTime === scheduledTimes[index]) {
       handleCancelEdit();
       return;
     }
 
-    setScheduledTimes(prev => {
+    setScheduledTimes((prev) => {
       const newTimes = [...prev];
       newTimes[index] = editingTime;
       return newTimes;
@@ -159,11 +208,11 @@ const VideoManager = () => {
 
   const handleCancelEdit = () => {
     setEditingIndex(null);
-    setEditingTime('');
+    setEditingTime("");
   };
 
   const handleDeleteTime = (index) => {
-    setScheduledTimes(prev => prev.filter((_, i) => i !== index));
+    setScheduledTimes((prev) => prev.filter((_, i) => i !== index));
     setHasTimeChanges(true);
   };
 
@@ -171,10 +220,10 @@ const VideoManager = () => {
     try {
       await api.saveTimes(scheduledTimes);
       setHasTimeChanges(false);
-      toast.success('Zamanlar başarıyla kaydedildi!');
+      toast.success("Zamanlar başarıyla kaydedildi!");
     } catch (error) {
-      console.error('Zamanlar kaydedilirken hata oluştu:', error);
-      toast.error('Zamanlar kaydedilirken hata oluştu!');
+      console.error("Zamanlar kaydedilirken hata oluştu:", error);
+      toast.error("Zamanlar kaydedilirken hata oluştu!");
     }
   };
 
@@ -185,7 +234,7 @@ const VideoManager = () => {
       setIsSchedulerRunning(status);
       setSchedulerMessage(status.message);
     } catch (error) {
-      console.error('Zamanlayıcı başlatılırken hata oluştu:', error);
+      console.error("Zamanlayıcı başlatılırken hata oluştu:", error);
     }
   };
 
@@ -196,36 +245,36 @@ const VideoManager = () => {
       setIsSchedulerRunning(status);
       setSchedulerMessage(status.message);
     } catch (error) {
-      console.error('Zamanlayıcı durdurulurken hata oluştu:', error);
+      console.error("Zamanlayıcı durdurulurken hata oluştu:", error);
     }
   };
 
   const handleSaveToken = async () => {
     try {
       if (!botToken) {
-        toast.error('Bot token boş olamaz!');
+        toast.error("Bot token boş olamaz!");
         return;
       }
 
       const result = await api.saveTelegramSettings({
         token: botToken,
-        isEnabled: false
+        isEnabled: false,
       });
 
       setBotToken(result.token);
       setIsBotEnabled(result.isEnabled);
       setBotStatus({
         lastError: result.lastError,
-        lastSuccess: 'Bot token başarıyla kaydedildi'
+        lastSuccess: "Bot token başarıyla kaydedildi",
       });
 
-      toast.success('Bot token başarıyla kaydedildi!');
+      toast.success("Bot token başarıyla kaydedildi!");
     } catch (error) {
-      console.error('Bot token kaydedilirken hata:', error);
-      toast.error('Bot token kaydedilirken hata oluştu!');
+      console.error("Bot token kaydedilirken hata:", error);
+      toast.error("Bot token kaydedilirken hata oluştu!");
       setBotStatus({
         lastError: error.message,
-        lastSuccess: ''
+        lastSuccess: "",
       });
     }
   };
@@ -233,31 +282,92 @@ const VideoManager = () => {
   const handleToggleBot = async () => {
     try {
       if (!botToken) {
-        toast.error('Önce bot token kaydedin!');
+        toast.error("Önce bot token kaydedin!");
         return;
       }
 
       const newStatus = !isBotEnabled;
       const result = await api.saveTelegramSettings({
         token: botToken,
-        isEnabled: newStatus
+        isEnabled: newStatus,
       });
 
       setIsBotEnabled(result.isEnabled);
       setBotStatus({
         lastError: result.lastError,
-        lastSuccess: result.lastSuccess
+        lastSuccess: result.lastSuccess,
       });
 
-      toast.success(newStatus ? 'Bot başlatıldı!' : 'Bot durduruldu!');
+      toast.success(newStatus ? "Bot başlatıldı!" : "Bot durduruldu!");
     } catch (error) {
-      console.error('Bot durumu değiştirilirken hata:', error);
-      toast.error('Bot durumu değiştirilirken hata oluştu!');
+      console.error("Bot durumu değiştirilirken hata:", error);
+      toast.error("Bot durumu değiştirilirken hata oluştu!");
       setBotStatus({
         lastError: error.message,
-        lastSuccess: ''
+        lastSuccess: "",
       });
     }
+  };
+
+  const renderProgressBar = () => {
+    if (!uploadProgress) return null;
+
+    const getStatusColor = () => {
+      switch (uploadProgress.status) {
+        case "tamamlandı":
+          return "bg-green-500";
+        case "hata":
+          return "bg-red-500";
+        default:
+          return "bg-blue-500";
+      }
+    };
+
+    const getStatusText = () => {
+      switch (uploadProgress.stage) {
+        case "başlatılıyor":
+          return "Video yükleniyor...";
+        case "sıkıştırma":
+          return `Sıkıştırılıyor (${uploadProgress.fps || 0} FPS)`;
+        case "kopyalama":
+          return "Dosya kopyalanıyor...";
+        case "kayıt":
+          return "Kaydediliyor...";
+        case "tamamlandı":
+          return "Yükleme tamamlandı!";
+        case "hata":
+          return `Hata: ${uploadProgress.error}`;
+        default:
+          return "İşleniyor...";
+      }
+    };
+
+    return (
+      <div className="mt-4 space-y-2">
+        <div className="flex justify-between text-sm text-gray-400">
+          <span>{uploadProgress.fileName}</span>
+          <span>{uploadProgress.percent}%</span>
+        </div>
+        <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+          <div
+            className={`h-full ${getStatusColor()} transition-all duration-300`}
+            style={{ width: `${uploadProgress.percent}%` }}
+          />
+        </div>
+        <div className="flex justify-between items-center text-sm">
+          <span className="text-gray-400">{getStatusText()}</span>
+          {uploadProgress.stage === "sıkıştırma" &&
+            uploadProgress.targetSize &&
+            uploadProgress.processedDuration && (
+              <div className="text-xs text-gray-500 space-y-1">
+                <div>Hedef Boyut: {uploadProgress.targetSize}</div>
+                <div>İşlenen Süre: {uploadProgress.processedDuration}</div>
+                {uploadProgress.fps && <div>FPS: {uploadProgress.fps}</div>}
+              </div>
+            )}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -274,13 +384,15 @@ const VideoManager = () => {
             className="w-full p-4 border border-telegram-border rounded-lg hover:bg-telegram-hover transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <FiUpload className="w-6 h-6" />
-            <span>{selectedFiles.length > 0 ? 'Videolar Seçildi' : 'Video Seç'}</span>
+            <span>
+              {selectedFiles.length > 0 ? "Videolar Seçildi" : "Video Seç"}
+            </span>
           </button>
           {selectedFiles.length > 0 && (
             <div className="mt-2 text-sm text-gray-400">
               {selectedFiles.map((file, index) => (
                 <p key={index} className="truncate">
-                  Seçilen: {file.split('\\').pop()}
+                  Seçilen: {file.split("\\").pop()}
                 </p>
               ))}
             </div>
@@ -312,13 +424,16 @@ const VideoManager = () => {
           />
         </div>
 
+        {renderProgressBar()}
+
         <button
           onClick={handleUpload}
           disabled={isUploading || !channelLink || !selectedFiles}
           className={`w-full p-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-all duration-200
-            ${isUploading
-              ? 'bg-cyan-700 cursor-not-allowed'
-              : 'bg-cyan-600 hover:bg-cyan-500'
+            ${
+              isUploading
+                ? "bg-cyan-700 cursor-not-allowed"
+                : "bg-cyan-600 hover:bg-cyan-500"
             } disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {isUploading ? (
@@ -345,10 +460,10 @@ const VideoManager = () => {
                   {channel.channelLink}
                 </h3>
                 <span className="text-xs text-gray-500">
-                  {new Date().toLocaleDateString('tr-TR', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
+                  {new Date().toLocaleDateString("tr-TR", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
                   })}
                 </span>
               </div>
@@ -361,13 +476,13 @@ const VideoManager = () => {
                   >
                     <div className="flex items-center space-x-3 flex-1">
                       <div className="flex-shrink-0">
-                        {video.status === 'sent' && (
+                        {video.status === "sent" && (
                           <BsCheckCircleFill className="w-5 h-5 text-green-500" />
                         )}
-                        {video.status === 'pending' && (
+                        {video.status === "pending" && (
                           <BsClock className="w-5 h-5 text-yellow-500" />
                         )}
-                        {video.status === 'error' && (
+                        {video.status === "error" && (
                           <BsXCircleFill className="w-5 h-5 text-red-500" />
                         )}
                       </div>
@@ -375,14 +490,17 @@ const VideoManager = () => {
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-white truncate">
                           {video.filename.length > 20
-                            ? video.filename.substring(0, 20) + '...'
+                            ? video.filename.substring(0, 20) + "..."
                             : video.filename}
                         </p>
                         <p className="text-xs text-gray-400">
-                          {new Date(video.createdAt).toLocaleDateString('tr-TR', {
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
+                          {new Date(video.createdAt).toLocaleDateString(
+                            "tr-TR",
+                            {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }
+                          )}
                         </p>
                       </div>
                     </div>
@@ -411,24 +529,28 @@ const VideoManager = () => {
         <h2 className="text-xl font-semibold mb-4">Zamanlayıcı Kontrolü</h2>
         <div className="bg-telegram-card border border-telegram-border rounded-lg p-6 space-y-4">
           <div className="flex items-center space-x-2">
-            <div className={`w-3 h-3 rounded-full ${isSchedulerRunning ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
+            <div
+              className={`w-3 h-3 rounded-full ${
+                isSchedulerRunning ? "bg-emerald-500" : "bg-red-500"
+              }`}
+            ></div>
             <span className="text-sm font-medium">
-              {isSchedulerRunning ? 'Zamanlayıcı Çalışıyor' : 'Zamanlayıcı Durdu'}
+              {isSchedulerRunning
+                ? "Zamanlayıcı Çalışıyor"
+                : "Zamanlayıcı Durdu"}
             </span>
           </div>
 
           {schedulerMessage && (
-            <div className="text-sm text-gray-400">
-              {schedulerMessage}
-            </div>
+            <div className="text-sm text-gray-400">{schedulerMessage}</div>
           )}
 
           <button
-            onClick={isSchedulerRunning ? handleStopScheduler : handleStartScheduler}
+            onClick={
+              isSchedulerRunning ? handleStopScheduler : handleStartScheduler
+            }
             className={`w-full p-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-all duration-200
-              ${isSchedulerRunning
-                ? 'bg-red-600'
-                : 'bg-emerald-600'}`}
+              ${isSchedulerRunning ? "bg-red-600" : "bg-emerald-600"}`}
           >
             {isSchedulerRunning ? (
               <>
@@ -518,10 +640,11 @@ const VideoManager = () => {
           <button
             onClick={handleSaveTimes}
             disabled={!hasTimeChanges}
-            className={`w-full p-3 rounded-lg font-medium transition-all duration-200 ${hasTimeChanges
-              ? 'bg-emerald-600 hover:bg-emerald-500'
-              : 'bg-gray-600 cursor-not-allowed'
-              }`}
+            className={`w-full p-3 rounded-lg font-medium transition-all duration-200 ${
+              hasTimeChanges
+                ? "bg-emerald-600 hover:bg-emerald-500"
+                : "bg-gray-600 cursor-not-allowed"
+            }`}
           >
             Zamanları Kaydet
           </button>
@@ -535,8 +658,14 @@ const VideoManager = () => {
             Telegram Bot Ayarları
           </h2>
           <div className="flex items-center gap-2">
-            <span className={`w-3 h-3 rounded-full ${isBotEnabled ? 'bg-emerald-400' : 'bg-red-500'}`}></span>
-            <span className="text-sm text-gray-400">{isBotEnabled ? 'Aktif' : 'Devre Dışı'}</span>
+            <span
+              className={`w-3 h-3 rounded-full ${
+                isBotEnabled ? "bg-emerald-400" : "bg-red-500"
+              }`}
+            ></span>
+            <span className="text-sm text-gray-400">
+              {isBotEnabled ? "Aktif" : "Devre Dışı"}
+            </span>
           </div>
         </div>
 
@@ -557,7 +686,11 @@ const VideoManager = () => {
                 onClick={handleSaveToken}
                 disabled={!botToken}
                 className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2
-                  ${botToken ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-600 cursor-not-allowed'}`}
+                  ${
+                    botToken
+                      ? "bg-blue-500 hover:bg-blue-600"
+                      : "bg-gray-600 cursor-not-allowed"
+                  }`}
               >
                 <FaSave />
                 Kaydet
@@ -568,17 +701,28 @@ const VideoManager = () => {
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-400">Bot Durumu</span>
-                <span className={`text-sm ${isBotEnabled ? 'text-green-400' : 'text-red-400'}`}>
-                  {isBotEnabled ? 'Çalışıyor' : 'Durduruldu'}
+                <span className="text-sm font-medium text-gray-400">
+                  Bot Durumu
+                </span>
+                <span
+                  className={`text-sm ${
+                    isBotEnabled ? "text-green-400" : "text-red-400"
+                  }`}
+                >
+                  {isBotEnabled ? "Çalışıyor" : "Durduruldu"}
                 </span>
               </div>
               <button
                 onClick={handleToggleBot}
                 disabled={!botToken}
                 className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2
-                  ${!botToken ? 'bg-gray-600 cursor-not-allowed' :
-                    isBotEnabled ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}
+                  ${
+                    !botToken
+                      ? "bg-gray-600 cursor-not-allowed"
+                      : isBotEnabled
+                      ? "bg-red-500 hover:bg-red-600"
+                      : "bg-green-500 hover:bg-green-600"
+                  }`}
               >
                 {isBotEnabled ? (
                   <>

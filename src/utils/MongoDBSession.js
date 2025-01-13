@@ -1,29 +1,29 @@
 const { MemorySession } = require("telegram/sessions");
 const { AuthKey } = require("telegram/crypto/AuthKey");
-const sessionManager = require("./SessionManager");
 
 class MongoDBSession extends MemorySession {
-  constructor(sessionId) {
+  constructor(sessionId, store) {
     super();
     this.sessionId = sessionId;
+    this.store = store;
   }
 
   async load() {
     try {
-      const sessionId = this.sessionId;
-      const sessions = await sessionManager.getSessions();
-      const sessionData = await sessions.find(
-        (session) => session.sessionId == sessionId
+      const sessions = this.store.get("sessions") || [];
+      const sessionData = sessions.find(
+        (session) => session.sessionId === this.sessionId
       );
 
       if (!sessionData) {
-        throw new Error("Session verisi bulunamadı.");
+        throw new Error("Session verisi bulunamadı");
       }
 
-      const authKeyData = sessionData.authKey;
-      if (authKeyData) {
+      if (sessionData.authKey) {
         this._authKey = new AuthKey();
-        await this._authKey.setKey(Buffer.from(authKeyData._key, "base64"));
+        await this._authKey.setKey(
+          Buffer.from(sessionData.authKey._key, "base64")
+        );
       }
 
       this._dcId = sessionData.dcId;
@@ -32,6 +32,7 @@ class MongoDBSession extends MemorySession {
 
       return this;
     } catch (error) {
+      console.error("Session yükleme hatası:", error);
       throw error;
     }
   }

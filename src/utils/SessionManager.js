@@ -106,14 +106,13 @@ class SessionManager {
       }
 
       const sessions = await this.getSessions();
-
       if (sessions.length === 0) {
         return { success: false, message: "Hiç aktif session bulunamadı!" };
       }
 
       const loginPromises = sessions.map(async (session) => {
         const { apiId, apiHash } = getRandomApiCredentials();
-        const mongoSession = new MongoDBSession(session.sessionId);
+        const mongoSession = new MongoDBSession(session.sessionId, this.store);
 
         try {
           await mongoSession.load();
@@ -131,10 +130,6 @@ class SessionManager {
             sessionId: session.sessionId,
             client,
             phoneNumber: user.phone,
-            userId: user.id,
-            username: user.username,
-            apiId,
-            apiHash,
           };
         } catch (error) {
           return null;
@@ -154,7 +149,10 @@ class SessionManager {
         message: `${this.loggedInSessions.length} session başarıyla aktif edildi`,
       };
     } catch (error) {
-      return { success: false, message: error.message };
+      return {
+        success: false,
+        message: error.message,
+      };
     }
   }
 

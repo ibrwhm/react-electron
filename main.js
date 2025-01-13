@@ -3,7 +3,7 @@ const { autoUpdater } = require("electron-updater");
 const path = require("path");
 const log = require("electron-log");
 const fs = require("fs");
-const dotenv = require('dotenv');
+const dotenv = require("dotenv");
 
 log.transports.file.level = "debug";
 log.transports.console.level = "debug";
@@ -11,8 +11,15 @@ log.transports.console.level = "debug";
 const isDev = process.env.NODE_ENV === "development";
 const os = require("os");
 
-const envPath = isDev ? '.env' : path.join(process.resourcesPath, '.env');
+const envPath = isDev ? ".env" : path.join(process.resourcesPath, ".env");
 dotenv.config({ path: envPath });
+
+const getAssetPath = (fileName) => {
+  if (isDev) {
+    return path.join(__dirname, "src", "assets", fileName);
+  }
+  return path.join(process.resourcesPath, "build", fileName);
+};
 
 const PRELOAD_PATH = isDev
   ? path.join(__dirname, "preload.js")
@@ -22,9 +29,7 @@ const SPLASH_PATH = isDev
   ? path.join(__dirname, "splash.html")
   : path.join(process.resourcesPath, "splash.html");
 
-const ICON_PATH = isDev
-  ? path.join(__dirname, "src", "assets", "icon.ico")
-  : path.join(process.resourcesPath, "build", "icon.ico");
+const ICON_PATH = getAssetPath("icon.png");
 
 let mainWindow = null;
 let tray = null;
@@ -43,7 +48,7 @@ function createSplashWindow() {
         contextIsolation: false,
       },
       center: true,
-      icon: ICON_PATH
+      icon: ICON_PATH,
     });
 
     splashWindow.loadFile(SPLASH_PATH).catch((err) => {
@@ -72,7 +77,7 @@ function createWindow() {
         preload: PRELOAD_PATH,
         webSecurity: false,
       },
-      backgroundColor: '#ffffff',
+      backgroundColor: "#ffffff",
     });
 
     if (isDev) {
@@ -80,7 +85,11 @@ function createWindow() {
       mainWindow.webContents.openDevTools();
     } else {
       try {
-        const indexPath = path.join(process.resourcesPath, 'dist', 'index.html');
+        const indexPath = path.join(
+          process.resourcesPath,
+          "dist",
+          "index.html"
+        );
 
         if (!fs.existsSync(indexPath)) {
           log.error("index.html not found at:", indexPath);
@@ -148,7 +157,6 @@ function createTray() {
         log.error("mainWindow is null in tray click");
       }
     });
-
   } catch (error) {
     log.error("Error in createTray:", error);
   }
@@ -166,6 +174,7 @@ const licenseManager = require("./src/utils/LicenseManager");
 const videoManager = require("./src/utils/VideoManager");
 const emojiManager = require("./src/utils/EmojiManager");
 const sessionManager = require("./src/utils/SessionManager");
+const channelManager = require("./src/utils/ChannelManager");
 
 function setupAutoUpdater() {
   if (!isDev) {
@@ -174,53 +183,58 @@ function setupAutoUpdater() {
     autoUpdater.allowPrerelease = false;
 
     autoUpdater.setFeedURL({
-      provider: 'github',
-      owner: 'ibrwhm',
-      repo: 'react-electron',
-      private: false
+      provider: "github",
+      owner: "ibrwhm",
+      repo: "react-electron",
+      private: false,
     });
 
-    // Hata durumunda kullanıcıya bilgi ver
-    autoUpdater.on('error', (error) => {
-      log.error('Güncelleme hatası:', error);
+    autoUpdater.on("error", (error) => {
+      log.error("Güncelleme hatası:", error);
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('update-error', {
-          message: 'Güncelleme indirilirken bir hata oluştu',
-          error: error.message
+        mainWindow.webContents.send("update-error", {
+          message: "Güncelleme indirilirken bir hata oluştu",
+          error: error.message,
         });
       }
     });
 
-    autoUpdater.on('checking-for-update', () => {
+    autoUpdater.on("checking-for-update", () => {
       if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.webContents.send('update-status', 'Güncellemeler kontrol ediliyor...');
+        splashWindow.webContents.send(
+          "update-status",
+          "Güncellemeler kontrol ediliyor..."
+        );
       }
     });
 
-    autoUpdater.on('update-available', async (info) => {
+    autoUpdater.on("update-available", async (info) => {
       try {
         if (splashWindow && !splashWindow.isDestroyed()) {
-          splashWindow.webContents.send('update-status', `Yeni sürüm bulundu: ${info.version}`);
-          // Splash ekranında otomatik indirmeyi başlat
-          autoUpdater.downloadUpdate().catch(error => {
-            log.error('Güncelleme indirme hatası:', error);
+          splashWindow.webContents.send(
+            "update-status",
+            `Yeni sürüm bulundu: ${info.version}`
+          );
+
+          autoUpdater.downloadUpdate().catch((error) => {
+            log.error("Güncelleme indirme hatası:", error);
           });
         }
 
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('update-available', {
+          mainWindow.webContents.send("update-available", {
             version: info.version,
-            releaseNotes: info.releaseNotes
+            releaseNotes: info.releaseNotes,
           });
         }
       } catch (error) {
-        log.error('Güncelleme kontrolü hatası:', error);
+        log.error("Güncelleme kontrolü hatası:", error);
       }
     });
 
-    autoUpdater.on('update-not-available', () => {
+    autoUpdater.on("update-not-available", () => {
       if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.webContents.send('update-status', 'Uygulama güncel');
+        splashWindow.webContents.send("update-status", "Uygulama güncel");
         setTimeout(() => {
           if (!splashWindow.isDestroyed()) {
             splashWindow.destroy();
@@ -232,45 +246,49 @@ function setupAutoUpdater() {
       }
     });
 
-    autoUpdater.on('download-progress', (progressObj) => {
+    autoUpdater.on("download-progress", (progressObj) => {
       if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.webContents.send('update-status', `İndiriliyor... ${progressObj.percent.toFixed(2)}%`);
+        splashWindow.webContents.send(
+          "update-status",
+          `İndiriliyor... ${progressObj.percent.toFixed(2)}%`
+        );
       }
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('download-progress', progressObj);
+        mainWindow.webContents.send("download-progress", progressObj);
       }
     });
 
-    autoUpdater.on('update-downloaded', () => {
+    autoUpdater.on("update-downloaded", () => {
       if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.webContents.send('update-status', 'Güncelleme hazır, yeniden başlatılıyor...');
+        splashWindow.webContents.send(
+          "update-status",
+          "Güncelleme hazır, yeniden başlatılıyor..."
+        );
         setTimeout(() => {
           autoUpdater.quitAndInstall(true, true);
         }, 2000);
       }
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('update-downloaded');
+        mainWindow.webContents.send("update-downloaded");
         setTimeout(() => {
           autoUpdater.quitAndInstall(true, true);
         }, 2000);
       }
     });
 
-    // Her saat başı güncelleme kontrolü
     let updateCheckInterval = setInterval(() => {
       try {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          autoUpdater.checkForUpdates().catch(error => {
-            log.error('Periyodik güncelleme kontrolü hatası:', error);
+          autoUpdater.checkForUpdates().catch((error) => {
+            log.error("Periyodik güncelleme kontrolü hatası:", error);
           });
         }
       } catch (error) {
-        log.error('Periyodik güncelleme kontrolü hatası:', error);
+        log.error("Periyodik güncelleme kontrolü hatası:", error);
       }
     }, 60 * 60 * 1000);
 
-    // Uygulama kapanırken interval'i temizle
-    app.on('before-quit', () => {
+    app.on("before-quit", () => {
       clearInterval(updateCheckInterval);
     });
   }
@@ -278,8 +296,26 @@ function setupAutoUpdater() {
 
 function setupIpcHandlers() {
   ipcMain.handle("get-system-info", () => {
+    const platform = os.platform();
+    let osInfo = "";
+
+    switch (platform) {
+      case "win32":
+        osInfo = `Windows ${os.release()}`;
+        break;
+      case "darwin":
+        osInfo = `macOS ${os.release()}`;
+        break;
+      case "linux":
+        osInfo = `Linux ${os.release()}`;
+        break;
+      default:
+        osInfo = `${platform} ${os.release()}`;
+    }
+
     return {
-      platform: os.platform(),
+      os: osInfo,
+      platform: platform,
       arch: os.arch(),
       version: os.version(),
       release: os.release(),
@@ -292,20 +328,45 @@ function setupIpcHandlers() {
     };
   });
 
-  ipcMain.handle("get-ip-address", () => {
-    const nets = os.networkInterfaces();
-    let ip = "Bilinmiyor";
+  async function getPublicIp() {
+    try {
+      const response = await fetch("https://api.ipify.org?format=json");
+      const data = await response.json();
+      return data.ip;
+    } catch (error) {
+      log.error("IP adresi alınamadı:", error);
+      return null;
+    }
+  }
 
-    for (const name of Object.keys(nets)) {
-      for (const net of nets[name]) {
-        if (net.family === "IPv4" && !net.internal) {
-          ip = net.address;
-          break;
+  ipcMain.handle("get-ip-address", async () => {
+    try {
+      const publicIp = await getPublicIp();
+      if (publicIp) {
+        return { ip: publicIp };
+      }
+
+      const nets = os.networkInterfaces();
+      let ip = "Bilinmiyor";
+
+      for (const name of Object.keys(nets)) {
+        for (const net of nets[name]) {
+          if (net.family === "IPv4" && !net.internal) {
+            ip = net.address;
+            break;
+          }
         }
       }
-    }
 
-    return { ip };
+      return { ip };
+    } catch (error) {
+      log.error("IP adresi alınamadı:", error);
+      return { ip: "Bilinmiyor" };
+    }
+  });
+
+  ipcMain.handle("get-upload-progress", () => {
+    return videoManager.getUploadProgress();
   });
 
   ipcMain.handle("get-app-version", () => {
@@ -630,10 +691,15 @@ function setupIpcHandlers() {
   ipcMain.handle("getReactionChannels", async () => {
     try {
       const result = await emojiManager.getChannels();
+
       if (result.success) {
         return { success: true, channels: result.channels };
-      } else return { success: false };
+      } else {
+        console.error("IPC: Kanal getirme hatası:", result.error);
+        return { success: false, error: result.error };
+      }
     } catch (error) {
+      console.error("IPC: getReactionChannels hatası:", error);
       return { success: false, error: error.message };
     }
   });
@@ -692,18 +758,27 @@ function setupIpcHandlers() {
 
   ipcMain.handle("updateChannelStatus", async (_, { channelId, active }) => {
     try {
-      const result = await emojiManager.updateChannel(channelId, { active });
+      const result = await emojiManager.updateChannelStatus({
+        channelId,
+        active,
+      });
 
-      if (!result) {
-        throw new Error("Kanal bulunamadı");
+      if (result.success) {
+        return {
+          success: true,
+          channels: result.channels,
+        };
+      } else {
+        return {
+          success: false,
+          error: result.error,
+        };
       }
-
-      const channels = await emojiManager.getChannels();
-      await emojiManager.updateChannelStatus(channels);
-
-      return { success: true, channels: channels.toObject() };
     } catch (error) {
-      return { success: false, error: error.message };
+      return {
+        success: false,
+        error: error.message || "Kanal durumu güncellenirken bir hata oluştu",
+      };
     }
   });
 
@@ -824,13 +899,72 @@ function setupIpcHandlers() {
     }
   });
 
-  // Güncelleme ile ilgili IPC handlers
-  ipcMain.handle('start-update-download', () => {
+  ipcMain.handle("start-update-download", () => {
     autoUpdater.downloadUpdate();
   });
 
-  ipcMain.handle('quit-and-install', () => {
+  ipcMain.handle("quit-and-install", () => {
     autoUpdater.quitAndInstall();
+  });
+
+  ipcMain.handle("joinChannel", async (_, channelName) => {
+    try {
+      const results = await channelManager.joinChannel(channelName);
+
+      if (results.failed > 0 && results.success === 0) {
+        throw new Error(
+          `${results.success} başarılı, ${
+            results.failed
+          } başarısız işlem. Hata: ${
+            results.errors[0]?.error || "Bilinmeyen hata"
+          }`
+        );
+      }
+
+      return results;
+    } catch (error) {
+      throw error;
+    }
+  });
+
+  ipcMain.handle("leaveChannel", async (_, channelName) => {
+    try {
+      const results = await channelManager.leaveChannel(channelName);
+
+      if (results.failed > 0 && results.success === 0) {
+        throw new Error(
+          `${results.success} başarılı, ${
+            results.failed
+          } başarısız işlem. Hata: ${
+            results.errors[0]?.error || "Bilinmeyen hata"
+          }`
+        );
+      }
+
+      return results;
+    } catch (error) {
+      throw error;
+    }
+  });
+
+  ipcMain.handle("leaveAllChannels", async (_) => {
+    try {
+      const results = await channelManager.leaveAllChannels();
+
+      if (results.failed > 0 && results.success === 0) {
+        throw new Error(
+          `${results.success} başarılı, ${
+            results.failed
+          } başarısız işlem. Hata: ${
+            results.errors[0]?.error || "Bilinmeyen hata"
+          }`
+        );
+      }
+
+      return results;
+    } catch (error) {
+      throw error;
+    }
   });
 }
 
@@ -849,12 +983,12 @@ app.whenReady().then(async () => {
     setupAutoUpdater();
     setupIpcHandlers();
 
-    mainWindow.webContents.on('did-finish-load', async () => {
+    mainWindow.webContents.on("did-finish-load", async () => {
       if (!isDev) {
         try {
           await autoUpdater.checkForUpdates();
         } catch (updateError) {
-          log.error('Güncelleme kontrolü hatası:', updateError);
+          log.error("Güncelleme kontrolü hatası:", updateError);
           if (splashWindow) splashWindow.destroy();
           if (mainWindow) mainWindow.show();
         }
@@ -875,7 +1009,6 @@ app.whenReady().then(async () => {
     } catch (trayError) {
       log.error("Tray creation error:", trayError);
     }
-
   } catch (error) {
     log.error("Error in app.whenReady:", error);
     if (splashWindow) splashWindow.destroy();
