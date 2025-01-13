@@ -26,6 +26,7 @@ const getAssetPath = (fileName) => {
   if (isDev) {
     return path.join(__dirname, "src", "assets", fileName);
   }
+
   return path.join(process.resourcesPath, "build", fileName);
 };
 
@@ -117,7 +118,7 @@ function createWindow() {
           throw new Error("index.html not found");
         }
 
-        mainWindow.loadFile(indexPath).catch((err) => {
+        mainWindow.loadFile(indexPath, { hash: "/" }).catch((err) => {
           log.error("Error loading index.html:", err);
           mainWindow.webContents.openDevTools();
         });
@@ -142,29 +143,33 @@ function createWindow() {
 
 function createTray() {
   try {
-    if (tray) {
+    if (tray && !tray.isDestroyed()) {
+      tray.destroy();
+    }
+
+    const trayIconPath = ICON_PATH;
+    if (!fs.existsSync(trayIconPath)) {
       return;
     }
 
     try {
-      tray = new Tray(ICON_PATH);
+      tray = new Tray(trayIconPath);
     } catch (error) {
-      console.error("[error] Failed to create tray:", error);
+      return;
     }
 
     const contextMenu = Menu.buildFromTemplate([
       {
-        label: "Show App",
+        label: "Göster",
         click: () => {
           if (mainWindow) {
             mainWindow.show();
-          } else {
-            log.error("mainWindow is null in tray show click");
+            mainWindow.focus();
           }
         },
       },
       {
-        label: "Quit",
+        label: "Çıkış",
         click: () => {
           if (mainWindow) {
             mainWindow.destroy();
@@ -179,15 +184,47 @@ function createTray() {
 
     tray.on("click", () => {
       if (mainWindow) {
-        mainWindow.show();
-      } else {
-        log.error("mainWindow is null in tray click");
+        if (mainWindow.isVisible()) {
+          mainWindow.hide();
+        } else {
+          mainWindow.show();
+          mainWindow.focus();
+        }
       }
     });
+
+    tray.on("double-click", () => {
+      if (mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+
+    if (!tray || tray.isDestroyed()) {
+      log.error("Tray creation failed or tray was destroyed");
+      createTray();
+    }
   } catch (error) {
     log.error("Error in createTray:", error);
   }
 }
+
+ipcMain.on("recreate-tray", () => {
+  try {
+    if (tray && !tray.isDestroyed()) {
+      tray.destroy();
+    }
+    createTray();
+  } catch (error) {
+    log.error("Error recreating tray:", error);
+  }
+});
+
+ipcMain.on("maintain-tray", () => {
+  if (!tray || tray.isDestroyed()) {
+    createTray();
+  }
+});
 
 const databasePath = isDev
   ? path.join(__dirname, "src", "database")
@@ -398,12 +435,19 @@ function setupIpcHandlers() {
     "get-license": async () => {
       try {
         const storedKey = licenseManager.store.get("currentLicense");
-        if (!storedKey) return null;
+
+        if (!storedKey) {
+          return null;
+        }
 
         const result = await licenseManager.validateLicense(storedKey);
-        return result.valid ? result.license : null;
+
+        if (!result.valid) {
+          return null;
+        }
+
+        return result.license;
       } catch (error) {
-        log.error("Lisans kontrolü hatası:", error);
         return null;
       }
     },
@@ -860,6 +904,11 @@ function setupIpcHandlers() {
 
 app.whenReady().then(async () => {
   try {
+    await connectDB().catch((dbError) => {
+      log.error("Database connection error:", dbError);
+      throw dbError;
+    });
+
     splashWindow = createSplashWindow();
     if (!splashWindow) {
       throw new Error("Failed to create splash window");
@@ -870,6 +919,7 @@ app.whenReady().then(async () => {
       throw new Error("Failed to create main window");
     }
 
+    createTray();
     setupAutoUpdater();
     setupIpcHandlers();
 
@@ -890,15 +940,17 @@ app.whenReady().then(async () => {
       }
     });
 
-    connectDB().catch((dbError) => {
-      log.error("Database connection error:", dbError);
-    });
-
     try {
       createTray();
     } catch (trayError) {
       log.error("Tray creation error:", trayError);
     }
+
+    setInterval(() => {
+      if (!tray || tray.isDestroyed()) {
+        createTray();
+      }
+    }, 5000);
   } catch (error) {
     log.error("Error in app.whenReady:", error);
     if (splashWindow) splashWindow.destroy();

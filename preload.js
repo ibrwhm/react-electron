@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld("api", {
   getLicense: () => ipcRenderer.invoke("get-license"),
   logout: () => ipcRenderer.invoke("logout"),
   storeLicense: (key) => ipcRenderer.invoke("store-license", key),
+  maintainTray: () => ipcRenderer.send("maintain-tray"),
+  recreateTray: () => ipcRenderer.send("recreate-tray"),
   createLicense: (type, months, customKey) =>
     ipcRenderer.invoke("create-license", type, months, customKey),
   getAllLicenses: () => ipcRenderer.invoke("get-all-licenses"),

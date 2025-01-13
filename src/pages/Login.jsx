@@ -21,6 +21,7 @@ const Login = () => {
 
       if (result.data.valid) {
         await window.api.storeLicense(licenseKey);
+        await window.api.maintainTray();
         toast.success("Giriş başarılı!");
         navigate("/", { replace: true });
       } else {
