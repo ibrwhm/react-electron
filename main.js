@@ -756,8 +756,7 @@ app.whenReady().then(async () => {
           provider: 'github',
           owner: 'ibrwhm',
           repo: 'react-electron',
-          token: process.env.GITHUB_TOKEN,
-          private: true
+          private: false
         });
 
         autoUpdater.on('checking-for-update', () => {
