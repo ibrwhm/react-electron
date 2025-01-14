@@ -28,7 +28,7 @@ const Sidebar = ({ onLogout }) => {
         const license = await window.api.getLicense();
         setIsAdmin(license?.data.type === "admin");
         const appVersion = await window.api.getAppVersion();
-        setVersion(appVersion);
+        setVersion(appVersion.data);
       } catch (error) {
         setIsAdmin(false);
       }
