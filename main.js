@@ -24,9 +24,8 @@ dotenv.config({ path: envPath });
 
 const getAssetPath = (fileName) => {
   if (isDev) {
-    return path.join(__dirname, "src", "assets", fileName);
+    return path.join(__dirname, "build", fileName);
   }
-
   return path.join(process.resourcesPath, "build", fileName);
 };
 
@@ -62,39 +61,7 @@ function createSplashWindow() {
     });
 
     enable(splashWindow.webContents);
-
     splashWindow.loadFile(SPLASH_PATH);
-
-    if (!isDev) {
-      setTimeout(() => {
-        autoUpdater.checkForUpdates().catch((err) => {
-          log.error("Güncelleme kontrolü hatası:", err);
-          if (splashWindow && !splashWindow.isDestroyed()) {
-            splashWindow.webContents.send(
-              "update-status",
-              "Güncelleme kontrolü başarısız, devam ediliyor..."
-            );
-            setTimeout(() => {
-              if (splashWindow && !splashWindow.isDestroyed()) {
-                splashWindow.destroy();
-              }
-              if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.show();
-              }
-            }, 2000);
-          }
-        });
-      }, 1000);
-    } else {
-      setTimeout(() => {
-        if (splashWindow && !splashWindow.isDestroyed()) {
-          splashWindow.destroy();
-        }
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.show();
-        }
-      }, 2000);
-    }
 
     return splashWindow;
   } catch (error) {
@@ -274,8 +241,8 @@ const channelManager = require("./src/utils/ChannelManager");
 
 function setupAutoUpdater() {
   if (!isDev) {
-    autoUpdater.autoDownload = false;
-    autoUpdater.allowDowngrade = true;
+    autoUpdater.autoDownload = true;
+    autoUpdater.allowDowngrade = false;
     autoUpdater.allowPrerelease = false;
 
     autoUpdater.setFeedURL({
@@ -285,63 +252,51 @@ function setupAutoUpdater() {
       private: false,
     });
 
-    autoUpdater.on("error", (error) => {
-      log.error("Güncelleme hatası:", error);
-      if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.webContents.send(
-          "update-status",
-          "Güncelleme hatası, devam ediliyor..."
-        );
-        setTimeout(() => {
-          if (splashWindow && !splashWindow.isDestroyed()) {
-            splashWindow.destroy();
-          }
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.show();
-          }
-        }, 2000);
-      }
+    autoUpdater.on("checking-for-update", () => {
+      log.info("Güncellemeler kontrol ediliyor...");
     });
 
-    autoUpdater.on("update-available", async (info) => {
-      try {
+    autoUpdater.on("update-available", (info) => {
+      if (info.version > app.getVersion()) {
+        log.info("Yeni güncelleme bulundu:", info.version);
         if (splashWindow && !splashWindow.isDestroyed()) {
           splashWindow.webContents.send(
             "update-status",
-            `Yeni sürüm indiriliyor: ${info.version}`
+            "Güncelleme indiriliyor..."
           );
-          await autoUpdater.downloadUpdate();
         }
-      } catch (error) {
-        log.error("Güncelleme indirme hatası:", error);
+      } else {
+        log.info("Mevcut sürüm daha yeni, güncelleme atlanıyor");
         if (splashWindow && !splashWindow.isDestroyed()) {
-          splashWindow.webContents.send(
-            "update-status",
-            "Güncelleme hatası, devam ediliyor..."
-          );
-          setTimeout(() => {
-            if (splashWindow && !splashWindow.isDestroyed()) {
-              splashWindow.destroy();
-            }
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.show();
-            }
-          }, 2000);
+          splashWindow.destroy();
+        }
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.show();
         }
       }
     });
 
     autoUpdater.on("update-not-available", () => {
+      log.info("Güncelleme yok");
       if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.webContents.send("update-status", "Uygulama güncel");
         setTimeout(() => {
-          if (splashWindow && !splashWindow.isDestroyed()) {
-            splashWindow.destroy();
-          }
+          splashWindow.destroy();
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.show();
           }
-        }, 2000);
+        }, 1000);
+      }
+    });
+
+    autoUpdater.on("error", (error) => {
+      log.error("Güncelleme hatası:", error);
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        setTimeout(() => {
+          splashWindow.destroy();
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.show();
+          }
+        }, 1000);
       }
     });
 
@@ -365,6 +320,31 @@ function setupAutoUpdater() {
         }, 2000);
       }
     });
+
+    // Güncelleme kontrolünü başlat
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch((err) => {
+        log.error("Güncelleme kontrolü hatası:", err);
+        if (splashWindow && !splashWindow.isDestroyed()) {
+          setTimeout(() => {
+            splashWindow.destroy();
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.show();
+            }
+          }, 1000);
+        }
+      });
+    }, 1000);
+  } else {
+    // Geliştirme modunda splash ekranını kısa süre göster ve kapat
+    setTimeout(() => {
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.destroy();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.show();
+        }
+      }
+    }, 1000);
   }
 }
 
@@ -754,7 +734,6 @@ function setupIpcHandlers() {
     "delete-session": async (_, sessionId) => {
       try {
         const result = await sessionManager.deleteSession(sessionId);
-
         return result.success
           ? { success: true }
           : { success: false, error: result.error };
@@ -774,12 +753,16 @@ function setupIpcHandlers() {
           throw new Error("Geçersiz dosya yolu");
         }
 
-        return await sessionImporter.importMultipleSessions(
+        const result = await sessionImporter.importMultipleSessions(
           filePaths,
           (progress) => {
-            event.sender.send("import-progress", progress);
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send("import-progress", progress);
+            }
           }
         );
+
+        return result;
       } catch (error) {
         return { success: false, error: error.message };
       }
@@ -929,12 +912,13 @@ if (!gotTheLock) {
 
   app.on("ready", async () => {
     try {
-      await connectDB();
-      setupAutoUpdater();
       splashWindow = createSplashWindow();
+      await connectDB();
       mainWindow = createWindow();
+      mainWindow.hide();
       createTray();
       setupIpcHandlers();
+      setupAutoUpdater();
     } catch (error) {
       log.error("Error in app ready:", error);
     }

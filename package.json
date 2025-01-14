@@ -1,7 +1,7 @@
 {
   "name": "telegram-manager",
   "productName": "Telegram Manager",
-  "version": "1.0.31",
+  "version": "1.0.34",
   "description": "Telegram Manager",
   "author": {
     "name": "Rio",
@@ -80,29 +80,18 @@
     "wait-on": "^8.0.2"
   },
   "build": {
-    "appId": "com.rio.telegrammanager",
+    "appId": "com.telegram.manager",
     "productName": "Telegram Manager",
-    "copyright": "Copyright 2024 Rio",
-    "publish": {
-      "provider": "github",
-      "owner": "ibrwhm",
-      "repo": "react-electron",
-      "private": false,
-      "releaseType": "release",
-      "publishAutoUpdate": true
-    },
-    "directories": {
-      "output": "release",
-      "buildResources": "build"
-    },
+    "asar": true,
+    "extends": null,
     "files": [
       "main.js",
       "preload.js",
       "splash.html",
       "src/**/*",
       "build/**/*",
-      ".env",
-      "dist/**/*"
+      "dist/**/*",
+      ".env"
     ],
     "extraResources": [
       {
@@ -135,16 +124,35 @@
       "src/utils/**/*"
     ],
     "win": {
-      "target": "nsis",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "build/icon.png",
       "artifactName": "Telegram.Manager.Setup.${version}.exe",
-      "requestedExecutionLevel": "requireAdministrator"
+      "signAndEditExecutable": false
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": false,
+      "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": true
+    },
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "ibrwhm",
+      "repo": "react-electron",
+      "private": false,
+      "releaseType": "release",
+      "publishAutoUpdate": true
     }
   }
 }

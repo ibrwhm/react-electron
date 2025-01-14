@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { TrashIcon, ArrowPathIcon, CloudArrowUpIcon, XMarkIcon } from '@heroicons/react/24/outline';
-import { motion, AnimatePresence } from 'framer-motion';
-import toast from 'react-hot-toast';
+import React, { useState, useEffect } from "react";
+import {
+  TrashIcon,
+  ArrowPathIcon,
+  CloudArrowUpIcon,
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
+import { motion, AnimatePresence } from "framer-motion";
+import toast from "react-hot-toast";
 
 const SessionManager = () => {
   const [sessions, setSessions] = useState([]);
@@ -9,8 +14,17 @@ const SessionManager = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState({ success: 0, fail: 0, total: 0 });
-  const [checkProgress, setCheckProgress] = useState({ success: 0, fail: 0, total: 0, finished: false });
+  const [uploadProgress, setUploadProgress] = useState({
+    success: 0,
+    fail: 0,
+    total: 0,
+  });
+  const [checkProgress, setCheckProgress] = useState({
+    success: 0,
+    fail: 0,
+    total: 0,
+    finished: false,
+  });
   const [checking, setChecking] = useState(false);
 
   const loadSessions = async () => {
@@ -19,15 +33,36 @@ const SessionManager = () => {
       if (result.success) {
         setSessions(result.sessions);
       } else {
-        toast.error('Sessionlar yüklenemedi: ' + result.error);
+        toast.error("Sessionlar yüklenemedi: " + result.error);
       }
     } catch (error) {
-      toast.error('Sessionlar yüklenirken hata oluştu');
+      toast.error("Sessionlar yüklenirken hata oluştu");
     }
   };
 
   useEffect(() => {
     loadSessions();
+
+    // İlerleme durumu dinleyicisi
+    const importProgressHandler = (_, progress) => {
+      setUploadProgress(progress);
+      if (progress.finished) {
+        setUploading(false);
+        if (progress.success > 0) {
+          toast.success(`${progress.success} session başarıyla yüklendi`);
+        }
+        if (progress.fail > 0) {
+          toast.error(`${progress.fail} session yüklenemedi`);
+        }
+        loadSessions();
+      }
+    };
+
+    window.api.on("import-progress", importProgressHandler);
+
+    return () => {
+      window.api.removeListener("import-progress", importProgressHandler);
+    };
   }, []);
 
   const handleRefresh = async () => {
@@ -41,13 +76,13 @@ const SessionManager = () => {
       setLoading(true);
       const result = await window.api.deleteSession(sessionId);
       if (result.success) {
-        toast.success('Session başarıyla silindi');
+        toast.success("Session başarıyla silindi");
         await loadSessions();
       } else {
-        toast.error('Session silinemedi: ' + result.error);
+        toast.error("Session silinemedi: " + result.error);
       }
     } catch (error) {
-      toast.error('Session silinirken hata oluştu');
+      toast.error("Session silinirken hata oluştu");
     } finally {
       setLoading(false);
     }
@@ -56,29 +91,22 @@ const SessionManager = () => {
   const handleUploadSessions = async () => {
     try {
       const result = await window.api.showOpenDialog({
-        properties: ['openFile', 'multiSelections'],
-        filters: [{ name: 'Session Files', extensions: ['session'] }]
+        properties: ["openFile", "multiSelections"],
+        filters: [{ name: "Session Files", extensions: ["session"] }],
       });
 
       if (!result.canceled && result.filePaths.length > 0) {
         setUploading(true);
-        const importResult = await window.api.importSessions(result.filePaths);
-        
-        if (importResult.success && importResult.successCount > 0) {
-          toast.success(`${importResult.successCount} session başarıyla yüklendi`);
-          if (importResult.failCount > 0) {
-            toast.error(`${importResult.failCount} session yüklenemedi`);
-          }
-          await loadSessions();
-        } else {
-          toast.error(importResult.error || 'Session yüklenemedi');
-        }
+        setUploadProgress({
+          success: 0,
+          fail: 0,
+          total: result.filePaths.length,
+        });
+        await window.api.importSessions(result.filePaths);
       }
     } catch (error) {
-      toast.error('Session yükleme hatası: ' + error.message);
-    } finally {
+      toast.error("Session yükleme hatası: " + error.message);
       setUploading(false);
-      setShowUploadModal(false);
     }
   };
 
@@ -86,24 +114,24 @@ const SessionManager = () => {
     try {
       setChecking(true);
       const result = await window.api.checkSessions();
-      
+
       if (result.success) {
-        const successCount = result.results.filter(r => r.success).length;
-        const failCount = result.results.filter(r => !r.success).length;
-        
+        const successCount = result.results.filter((r) => r.success).length;
+        const failCount = result.results.filter((r) => !r.success).length;
+
         if (successCount > 0) {
           toast.success(`${successCount} session aktif ve çalışıyor`);
         }
         if (failCount > 0) {
           toast.error(`${failCount} session kontrol edilemedi`);
         }
-        
+
         await loadSessions();
       } else {
-        toast.error('Session kontrolü başarısız: ' + result.error);
+        toast.error("Session kontrolü başarısız: " + result.error);
       }
     } catch (error) {
-      toast.error('Session kontrolü sırasında hata: ' + error.message);
+      toast.error("Session kontrolü sırasında hata: " + error.message);
     } finally {
       setChecking(false);
     }
@@ -115,7 +143,7 @@ const SessionManager = () => {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       className={`bg-[#1a1b1e] rounded-lg p-4 flex justify-between items-center ${
-        !session.isActive ? 'opacity-50' : ''
+        !session.isActive ? "opacity-50" : ""
       }`}
     >
       <div className="flex flex-col">
@@ -123,14 +151,21 @@ const SessionManager = () => {
           <span className="text-lg font-medium text-white">
             {session.username || session.phone}
           </span>
-          <span className={`px-2 py-0.5 text-xs rounded-full ${
-            session.isActive ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'
-          }`}>
-            {session.isActive ? 'Aktif' : 'Pasif'}
+          <span
+            className={`px-2 py-0.5 text-xs rounded-full ${
+              session.isActive
+                ? "bg-green-500/20 text-green-500"
+                : "bg-red-500/20 text-red-500"
+            }`}
+          >
+            {session.isActive ? "Aktif" : "Pasif"}
           </span>
         </div>
         <span className="text-sm text-gray-400">
-          Son kontrol: {session.lastUsed ? new Date(session.lastUsed).toLocaleString() : 'Hiç kontrol edilmedi'}
+          Son kontrol:{" "}
+          {session.lastUsed
+            ? new Date(session.lastUsed).toLocaleString()
+            : "Hiç kontrol edilmedi"}
         </span>
       </div>
 
@@ -167,10 +202,12 @@ const SessionManager = () => {
               <XMarkIcon className="w-6 h-6" />
             </button>
 
-            <h2 className="text-xl font-semibold mb-4 text-white">Session Yükle</h2>
-            
+            <h2 className="text-xl font-semibold mb-4 text-white">
+              Session Yükle
+            </h2>
+
             <div className="space-y-4">
-              <div 
+              <div
                 onClick={handleUploadSessions}
                 className="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors"
               >
@@ -187,19 +224,30 @@ const SessionManager = () => {
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm text-gray-400">
                     <span>İlerleme:</span>
-                    <span>{uploadProgress.success + uploadProgress.fail} / {uploadProgress.total}</span>
+                    <span>
+                      {uploadProgress.success + uploadProgress.fail} /{" "}
+                      {uploadProgress.total}
+                    </span>
                   </div>
                   <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-blue-500 transition-all duration-300"
                       style={{
-                        width: `${((uploadProgress.success + uploadProgress.fail) / uploadProgress.total) * 100}%`
+                        width: `${
+                          ((uploadProgress.success + uploadProgress.fail) /
+                            uploadProgress.total) *
+                          100
+                        }%`,
                       }}
                     />
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-green-500">{uploadProgress.success} başarılı</span>
-                    <span className="text-red-500">{uploadProgress.fail} başarısız</span>
+                    <span className="text-green-500">
+                      {uploadProgress.success} başarılı
+                    </span>
+                    <span className="text-red-500">
+                      {uploadProgress.fail} başarısız
+                    </span>
                   </div>
                 </div>
               )}
@@ -242,7 +290,9 @@ const SessionManager = () => {
             className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors duration-200"
             disabled={loading}
           >
-            <ArrowPathIcon className={`h-5 w-5 ${checking ? 'animate-spin' : ''}`} />
+            <ArrowPathIcon
+              className={`h-5 w-5 ${checking ? "animate-spin" : ""}`}
+            />
             Kontrol Et
           </motion.button>
           <motion.button
@@ -250,48 +300,64 @@ const SessionManager = () => {
             whileTap={{ scale: 0.95 }}
             onClick={handleRefresh}
             className={`flex items-center px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors duration-200 ${
-              refreshing ? 'opacity-50 cursor-not-allowed' : ''
+              refreshing ? "opacity-50 cursor-not-allowed" : ""
             }`}
             disabled={refreshing}
           >
-            <ArrowPathIcon className={`h-5 w-5 ${refreshing ? 'animate-spin' : ''}`} />
+            <ArrowPathIcon
+              className={`h-5 w-5 ${refreshing ? "animate-spin" : ""}`}
+            />
           </motion.button>
         </div>
       </div>
 
       {sessions && sessions.length === 0 ? (
         <div className="text-center py-12">
-          <h2 className="text-xl text-gray-400 mb-2">Henüz hiç oturum bulunmuyor</h2>
-          <p className="text-gray-500">Yeni oturum eklemek için Session Ekle butonunu kullanın</p>
+          <h2 className="text-xl text-gray-400 mb-2">
+            Henüz hiç oturum bulunmuyor
+          </h2>
+          <p className="text-gray-500">
+            Yeni oturum eklemek için Session Ekle butonunu kullanın
+          </p>
         </div>
       ) : (
         <div className="bg-telegram-card p-4 rounded-lg grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {sessions.map((session, index) => {
-            const key = session.sessionId || session._id?.toString() || `temp-${index}`;
-            return (
-              <SessionCard key={key} session={session} />
-            );
+            const key =
+              session.sessionId || session._id?.toString() || `temp-${index}`;
+            return <SessionCard key={key} session={session} />;
           })}
         </div>
       )}
 
       {checkProgress.total > 0 && (
         <div className="bg-telegram-card p-4 rounded-lg mt-4">
-          <h2 className="text-lg font-medium text-white mb-2">Kontrol İlerlemesi</h2>
+          <h2 className="text-lg font-medium text-white mb-2">
+            Kontrol İlerlemesi
+          </h2>
           <div className="flex justify-between text-sm text-gray-400">
             <span>İlerleme:</span>
-            <span>{checkProgress.success + checkProgress.fail} / {checkProgress.total}</span>
+            <span>
+              {checkProgress.success + checkProgress.fail} /{" "}
+              {checkProgress.total}
+            </span>
           </div>
           <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
             <div
               className="h-full bg-blue-500 transition-all duration-300"
               style={{
-                width: `${((checkProgress.success + checkProgress.fail) / checkProgress.total) * 100}%`
+                width: `${
+                  ((checkProgress.success + checkProgress.fail) /
+                    checkProgress.total) *
+                  100
+                }%`,
               }}
             />
           </div>
           <div className="flex justify-between text-xs">
-            <span className="text-green-500">{checkProgress.success} başarılı</span>
+            <span className="text-green-500">
+              {checkProgress.success} başarılı
+            </span>
             <span className="text-red-500">{checkProgress.fail} başarısız</span>
           </div>
         </div>
