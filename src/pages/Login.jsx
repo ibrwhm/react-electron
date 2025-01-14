@@ -24,6 +24,7 @@ const Login = () => {
         await window.api.maintainTray();
         toast.success("Giriş başarılı!");
         navigate("/", { replace: true });
+        window.location.reload();
       } else {
         toast.error(result.message || "Geçersiz lisans anahtarı");
       }
