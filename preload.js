@@ -130,11 +130,7 @@ contextBridge.exposeInMainWorld("electron", {
     }
   },
   invoke: (channel, ...args) => {
-    const validChannels = [
-      "start-update-download",
-      "quit-and-install",
-      // ... diğer kanallar ...
-    ];
+    const validChannels = ["start-update-download", "quit-and-install"];
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args);
     }

@@ -254,26 +254,31 @@ function setupAutoUpdater() {
 
     autoUpdater.on("checking-for-update", () => {
       log.info("Güncellemeler kontrol ediliyor...");
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.webContents.send(
+          "update-status",
+          "Güncellemeler kontrol ediliyor..."
+        );
+      }
     });
 
     autoUpdater.on("update-available", (info) => {
-      if (info.version > app.getVersion()) {
-        log.info("Yeni güncelleme bulundu:", info.version);
-        if (splashWindow && !splashWindow.isDestroyed()) {
-          splashWindow.webContents.send(
-            "update-status",
-            "Güncelleme indiriliyor..."
-          );
-        }
-      } else {
-        log.info("Mevcut sürüm daha yeni, güncelleme atlanıyor");
+      log.info("Yeni güncelleme bulundu:", info.version);
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.webContents.send(
+          "update-status",
+          "Güncelleme indiriliyor..."
+        );
+      }
+      autoUpdater.downloadUpdate().catch((err) => {
+        log.error("Güncelleme indirme hatası:", err);
         if (splashWindow && !splashWindow.isDestroyed()) {
           splashWindow.destroy();
         }
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.show();
         }
-      }
+      });
     });
 
     autoUpdater.on("update-not-available", () => {
@@ -320,31 +325,6 @@ function setupAutoUpdater() {
         }, 2000);
       }
     });
-
-    // Güncelleme kontrolünü başlat
-    setTimeout(() => {
-      autoUpdater.checkForUpdates().catch((err) => {
-        log.error("Güncelleme kontrolü hatası:", err);
-        if (splashWindow && !splashWindow.isDestroyed()) {
-          setTimeout(() => {
-            splashWindow.destroy();
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.show();
-            }
-          }, 1000);
-        }
-      });
-    }, 1000);
-  } else {
-    // Geliştirme modunda splash ekranını kısa süre göster ve kapat
-    setTimeout(() => {
-      if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.destroy();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.show();
-        }
-      }
-    }, 1000);
   }
 }
 
@@ -913,14 +893,33 @@ if (!gotTheLock) {
   app.on("ready", async () => {
     try {
       splashWindow = createSplashWindow();
+
+      // Önce güncelleme kontrolü yap
+      if (!isDev) {
+        splashWindow.webContents.send(
+          "update-status",
+          "Güncellemeler kontrol ediliyor..."
+        );
+        setupAutoUpdater();
+        await autoUpdater.checkForUpdates();
+      }
+
+      // Sonra veritabanı bağlantısı
+      splashWindow.webContents.send(
+        "update-status",
+        "Veritabanına bağlanılıyor..."
+      );
       await connectDB();
+
       mainWindow = createWindow();
       mainWindow.hide();
       createTray();
       setupIpcHandlers();
-      setupAutoUpdater();
     } catch (error) {
       log.error("Error in app ready:", error);
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.destroy();
+      }
     }
   });
 }
