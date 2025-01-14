@@ -880,66 +880,34 @@ function setupIpcHandlers() {
   });
 }
 
-app.whenReady().then(async () => {
-  try {
-    splashWindow = createSplashWindow();
-    if (!splashWindow) {
-      throw new Error("Failed to create splash window");
-    }
+const gotTheLock = app.requestSingleInstanceLock();
 
-    await connectDB().catch((dbError) => {
-      log.error("Database connection error:", dbError);
-      throw dbError;
-    });
-
-    mainWindow = createWindow();
-    if (!mainWindow) {
-      throw new Error("Failed to create main window");
-    }
-
-    createTray();
-    setupAutoUpdater();
-    setupIpcHandlers();
-
-    if (!isDev) {
-      if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.webContents.send(
-          "update-status",
-          "Güncellemeler kontrol ediliyor..."
-        );
-        try {
-          await autoUpdater.checkForUpdates();
-        } catch (error) {
-          log.error("Güncelleme kontrolü hatası:", error);
-          if (splashWindow && !splashWindow.isDestroyed()) {
-            splashWindow.webContents.send("update-status", "Yükleniyor...");
-            setTimeout(() => {
-              if (splashWindow && !splashWindow.isDestroyed()) {
-                splashWindow.destroy();
-              }
-              if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.show();
-              }
-            }, 2000);
-          }
-        }
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
       }
-    } else {
-      setTimeout(() => {
-        if (splashWindow && !splashWindow.isDestroyed()) {
-          splashWindow.destroy();
-        }
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.show();
-        }
-      }, 2000);
+      mainWindow.show();
+      mainWindow.focus();
     }
-  } catch (error) {
-    log.error("Error in app.whenReady:", error);
-    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy();
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
-  }
-});
+  });
+
+  app.on("ready", async () => {
+    try {
+      await connectDB();
+      createSplashWindow();
+      createWindow();
+      createTray();
+      setupAutoUpdater();
+      setupIpcHandlers();
+    } catch (error) {
+      log.error("Error in app ready:", error);
+    }
+  });
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
