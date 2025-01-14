@@ -71,7 +71,7 @@ const VideoManager = () => {
           }
         }
       } catch (error) {
-        console.error("İlerleme takibinde hata:", error);
+        toast.error(error.message || "İlerleme takibinde hata");
       }
     }, 500);
   }, []);
@@ -102,7 +102,6 @@ const VideoManager = () => {
         success: telegramSettings.data.lastSuccess || "",
       });
     } catch (error) {
-      console.error("Veriler yüklenirken hata:", error);
       toast.error(error.message || "Veriler yüklenirken bir hata oluştu");
     }
   };
@@ -156,9 +155,8 @@ const VideoManager = () => {
         await loadInitialData();
       }
     } catch (error) {
-      console.error("Video yükleme hatası:", error);
       if (!cleanupRef.current) {
-        toast.error(error.message);
+        toast.error(error.message || "Video yükleme hatası");
       }
     } finally {
       if (!cleanupRef.current) {
@@ -241,7 +239,6 @@ const VideoManager = () => {
       setHasTimeChanges(false);
       toast.success("Zamanlar başarıyla kaydedildi!");
     } catch (error) {
-      console.error("Zamanlar kaydedilirken hata oluştu:", error);
       toast.error("Zamanlar kaydedilirken hata oluştu!");
     }
   };
@@ -253,7 +250,7 @@ const VideoManager = () => {
       setIsSchedulerRunning(status.data);
       setSchedulerMessage(status.message);
     } catch (error) {
-      console.error("Zamanlayıcı başlatılırken hata oluştu:", error);
+      toast.error(error.message || "Zamanlayıcı başlatılırken hata oluştu");
     }
   };
 
@@ -264,7 +261,7 @@ const VideoManager = () => {
       setIsSchedulerRunning(status.data);
       setSchedulerMessage(status.message);
     } catch (error) {
-      console.error("Zamanlayıcı durdurulurken hata oluştu:", error);
+      toast.error(error.message || "Zamanlayıcı başlatılırken hata oluştu");
     }
   };
 
@@ -289,7 +286,6 @@ const VideoManager = () => {
 
       toast.success("Bot token başarıyla kaydedildi!");
     } catch (error) {
-      console.error("Bot token kaydedilirken hata:", error);
       toast.error("Bot token kaydedilirken hata oluştu!");
       setBotStatus({
         lastError: error.message,

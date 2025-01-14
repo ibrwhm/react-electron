@@ -98,7 +98,6 @@ const Dashboard = () => {
         region: "TR",
       });
     } catch (error) {
-      console.error("Veri yüklenirken hata:", error);
       setError(error.message || "Veriler yüklenirken bir hata oluştu");
       toast.error("Veriler yüklenirken bir hata oluştu");
     } finally {

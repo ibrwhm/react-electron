@@ -255,21 +255,25 @@ function setupAutoUpdater() {
 
     autoUpdater.on("error", (error) => {
       log.error("Güncelleme hatası:", error);
-      if (splashWindow) {
+      if (splashWindow && !splashWindow.isDestroyed()) {
         splashWindow.webContents.send(
           "update-status",
           "Güncelleme hatası, devam ediliyor..."
         );
         setTimeout(() => {
-          splashWindow.destroy();
-          mainWindow.show();
+          if (splashWindow && !splashWindow.isDestroyed()) {
+            splashWindow.destroy();
+          }
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.show();
+          }
         }, 2000);
       }
     });
 
     autoUpdater.on("update-available", async (info) => {
       try {
-        if (splashWindow) {
+        if (splashWindow && !splashWindow.isDestroyed()) {
           splashWindow.webContents.send(
             "update-status",
             `Yeni sürüm indiriliyor: ${info.version}`
@@ -278,31 +282,39 @@ function setupAutoUpdater() {
         }
       } catch (error) {
         log.error("Güncelleme indirme hatası:", error);
-        if (splashWindow) {
+        if (splashWindow && !splashWindow.isDestroyed()) {
           splashWindow.webContents.send(
             "update-status",
             "Güncelleme hatası, devam ediliyor..."
           );
           setTimeout(() => {
-            splashWindow.destroy();
-            mainWindow.show();
+            if (splashWindow && !splashWindow.isDestroyed()) {
+              splashWindow.destroy();
+            }
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.show();
+            }
           }, 2000);
         }
       }
     });
 
     autoUpdater.on("update-not-available", () => {
-      if (splashWindow) {
+      if (splashWindow && !splashWindow.isDestroyed()) {
         splashWindow.webContents.send("update-status", "Uygulama güncel");
         setTimeout(() => {
-          splashWindow.destroy();
-          mainWindow.show();
+          if (splashWindow && !splashWindow.isDestroyed()) {
+            splashWindow.destroy();
+          }
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.show();
+          }
         }, 2000);
       }
     });
 
     autoUpdater.on("download-progress", (progressObj) => {
-      if (splashWindow) {
+      if (splashWindow && !splashWindow.isDestroyed()) {
         splashWindow.webContents.send(
           "update-status",
           `İndiriliyor... ${progressObj.percent.toFixed(2)}%`
@@ -311,7 +323,7 @@ function setupAutoUpdater() {
     });
 
     autoUpdater.on("update-downloaded", () => {
-      if (splashWindow) {
+      if (splashWindow && !splashWindow.isDestroyed()) {
         splashWindow.webContents.send(
           "update-status",
           "Güncelleme yükleniyor..."
@@ -890,30 +902,42 @@ app.whenReady().then(async () => {
     setupIpcHandlers();
 
     if (!isDev) {
-      splashWindow.webContents.send(
-        "update-status",
-        "Güncellemeler kontrol ediliyor..."
-      );
-      try {
-        await autoUpdater.checkForUpdates();
-      } catch (error) {
-        log.error("Güncelleme kontrolü hatası:", error);
-        splashWindow.webContents.send("update-status", "Yükleniyor...");
-        setTimeout(() => {
-          splashWindow.destroy();
-          mainWindow.show();
-        }, 2000);
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.webContents.send(
+          "update-status",
+          "Güncellemeler kontrol ediliyor..."
+        );
+        try {
+          await autoUpdater.checkForUpdates();
+        } catch (error) {
+          log.error("Güncelleme kontrolü hatası:", error);
+          if (splashWindow && !splashWindow.isDestroyed()) {
+            splashWindow.webContents.send("update-status", "Yükleniyor...");
+            setTimeout(() => {
+              if (splashWindow && !splashWindow.isDestroyed()) {
+                splashWindow.destroy();
+              }
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.show();
+              }
+            }, 2000);
+          }
+        }
       }
     } else {
       setTimeout(() => {
-        splashWindow.destroy();
-        mainWindow.show();
+        if (splashWindow && !splashWindow.isDestroyed()) {
+          splashWindow.destroy();
+        }
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.show();
+        }
       }, 2000);
     }
   } catch (error) {
     log.error("Error in app.whenReady:", error);
-    if (splashWindow) splashWindow.destroy();
-    if (mainWindow) mainWindow.show();
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy();
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
   }
 });
 

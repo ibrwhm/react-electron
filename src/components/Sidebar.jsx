@@ -28,9 +28,10 @@ const Sidebar = ({ onLogout }) => {
         const license = await window.api.getLicense();
         setIsAdmin(license?.data.type === "admin");
         const appVersion = await window.api.getAppVersion();
-        setVersion(appVersion.data);
+        setVersion(appVersion?.data?.version || "1.0.0");
       } catch (error) {
         setIsAdmin(false);
+        setVersion("1.0.0");
       }
     };
     checkAdmin();
@@ -73,12 +74,6 @@ const Sidebar = ({ onLogout }) => {
       icon: KeyIcon,
       text: "Lisans Yönetimi",
       adminOnly: true,
-    },
-    {
-      path: "/settings",
-      icon: Cog6ToothIcon,
-      text: "Ayarlar",
-      adminOnly: false,
     },
   ];
 

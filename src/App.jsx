@@ -10,7 +10,6 @@ const EmojiManager = lazy(() => import("./pages/EmojiManager"));
 const VideoManager = lazy(() => import("./pages/VideoManager"));
 const ChannelManager = lazy(() => import("./pages/ChannelManager"));
 const LicenseManagement = lazy(() => import("./pages/LicenseManagement"));
-const Settings = lazy(() => import("./pages/Settings"));
 const SessionManager = lazy(() => import("./pages/SessionManager"));
 const UpdateModal = lazy(() => import("./components/UpdateModal"));
 
@@ -39,22 +38,18 @@ function AuthCheck({ children }) {
         const license = await window.api.getLicense();
 
         if (!license) {
-          console.error("Lisans yanıtı alınamadı");
           throw new Error("Lisans bilgisi alınamadı");
         }
 
         if (!license.data) {
-          console.error("Lisans verisi bulunamadı");
           throw new Error("Lisans verisi bulunamadı");
         }
 
         if (!license.data.key) {
-          console.error("Lisans anahtarı bulunamadı");
           throw new Error("Lisans anahtarı bulunamadı");
         }
 
         if (!license.data.isActive) {
-          console.error("Lisans aktif değil");
           throw new Error("Lisans aktif değil");
         }
 
@@ -62,18 +57,15 @@ function AuthCheck({ children }) {
         const expiryDate = new Date(license.data.expiresAt);
 
         if (isNaN(expiryDate.getTime())) {
-          console.error("Geçersiz bitiş tarihi");
           throw new Error("Geçersiz lisans bitiş tarihi");
         }
 
         if (now > expiryDate) {
-          console.error("Lisans süresi dolmuş");
           throw new Error("Lisans süresi dolmuş");
         }
 
         setIsAuthenticated(true);
       } catch (error) {
-        console.error("Auth check error:", error);
         setIsAuthenticated(false);
         if (!isLogout) {
           toast.error(error.message || "Kimlik doğrulama hatası");
@@ -99,7 +91,6 @@ function AuthCheck({ children }) {
       toast.success("Başarıyla çıkış yapıldı");
       navigate("/login", { replace: true });
     } catch (error) {
-      console.error("Çıkış yapılırken hata:", error);
       toast.error("Çıkış yapılırken bir hata oluştu");
     }
   };
@@ -200,14 +191,6 @@ function App() {
                     element={
                       <Suspense fallback={<LoadingSpinner />}>
                         <LicenseManagement />
-                      </Suspense>
-                    }
-                  />
-                  <Route
-                    path="settings"
-                    element={
-                      <Suspense fallback={<LoadingSpinner />}>
-                        <Settings />
                       </Suspense>
                     }
                   />

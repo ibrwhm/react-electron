@@ -63,7 +63,6 @@ class VideoManager {
         });
       }
     } catch (error) {
-      console.error("Store initialization error:", error);
       throw error;
     }
   }
@@ -91,7 +90,6 @@ class VideoManager {
       this.store.set("sendTimes", sortedTimes);
       return sortedTimes;
     } catch (error) {
-      console.error("Error saving times:", error);
       throw error;
     }
   }
@@ -101,7 +99,6 @@ class VideoManager {
       const videos = this.store.get("videos", []);
       return Array.isArray(videos) ? videos : [];
     } catch (error) {
-      console.error("Error getting videos:", error);
       return [];
     }
   }
@@ -212,7 +209,6 @@ class VideoManager {
         stage: "hata",
         error: error.message,
       });
-      console.error("Video kaydedilirken hata:", error);
       throw new Error("Video kaydedilemedi: " + error.message);
     }
   }
@@ -242,7 +238,6 @@ class VideoManager {
       this.store.set("videos", videos);
       return { success: true };
     } catch (error) {
-      console.error("Error deleting video:", error);
       throw error;
     }
   }
@@ -251,7 +246,6 @@ class VideoManager {
     try {
       return this.store.get("schedulerStatus", false);
     } catch (error) {
-      console.error("Error getting scheduler status:", error);
       return false;
     }
   }
@@ -277,7 +271,6 @@ class VideoManager {
 
       return true;
     } catch (error) {
-      console.error("Error starting scheduler:", error);
       throw error;
     }
   }
@@ -299,7 +292,6 @@ class VideoManager {
 
       return false;
     } catch (error) {
-      console.error("Error stopping scheduler:", error);
       throw error;
     }
   }
@@ -345,7 +337,6 @@ class VideoManager {
                 }
                 processedCount++;
               } catch (error) {
-                console.error("Video gönderme hatası:", error);
                 const videoToUpdate = channel.videos.find(
                   (v) => v._id === randomVideo._id
                 );
@@ -364,7 +355,6 @@ class VideoManager {
         }
       }
     } catch (error) {
-      console.error("Video gönderme hatası:", error);
       throw new Error("Zamanlayıcı kontrolü yapılırken hata: " + error.message);
     }
   }
@@ -558,7 +548,6 @@ class VideoManager {
             }
           })
           .on("error", (err) => {
-            console.error("Video sıkıştırma hatası:", err);
             this.store.set("uploadProgress", {
               status: "hata",
               percent: 0,
@@ -571,7 +560,6 @@ class VideoManager {
           .save(outputPath);
       });
     } catch (error) {
-      console.error("Video sıkıştırma hatası:", error);
       throw new Error("Video sıkıştırma hatası: " + error.message);
     }
   }

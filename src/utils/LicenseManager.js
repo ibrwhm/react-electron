@@ -177,7 +177,6 @@ class LicenseManager {
         license: license.toObject(),
       };
     } catch (error) {
-      console.error("Lisans doğrulama hatası:", error);
       return {
         valid: false,
         message: error.message || "Lisans doğrulanırken bir hata oluştu",
@@ -247,9 +246,7 @@ class LicenseManager {
 
   async getAllLicenses() {
     try {
-      console.log("getAllLicenses çağrıldı");
       const licenses = await LicenseModel.find();
-      console.log("Veritabanından gelen lisanslar:", licenses);
 
       const formattedLicenses = licenses.map((license) => ({
         key: license.key,
@@ -271,10 +268,6 @@ class LicenseManager {
         })
       );
 
-      console.log("Formatlanmış lisanslar:", formattedLicenses);
-      console.log("Test lisansları:", testLicenseArray);
-
-      // Tüm lisansları birleştir
       const allLicenses = [...formattedLicenses, ...testLicenseArray];
 
       return {
@@ -282,7 +275,6 @@ class LicenseManager {
         data: allLicenses,
       };
     } catch (error) {
-      console.error("getAllLicenses hatası:", error);
       return {
         success: true,
         data: Object.entries(this.testLicenses).map(([key, license]) => ({

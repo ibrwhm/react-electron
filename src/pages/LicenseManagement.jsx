@@ -16,21 +16,15 @@ const LicenseManagement = () => {
   const loadLicenses = async () => {
     try {
       const allLicenses = await window.api.getAllLicenses();
-      console.log("Gelen lisanslar:", allLicenses);
-
-      // data property'sini kontrol et
       const licenseData = allLicenses.data || allLicenses;
 
-      // Eğer data bir obje ise Object.values ile diziye çevir
       const licenseArray = Array.isArray(licenseData)
         ? licenseData
         : Object.values(licenseData);
 
-      console.log("İşlenmiş lisans dizisi:", licenseArray);
       setLicenses(licenseArray);
       setLoading(false);
     } catch (error) {
-      console.error("Lisans yükleme hatası:", error);
       setError("Lisanslar yüklenirken hata oluştu");
       setLoading(false);
     }
