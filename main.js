@@ -65,8 +65,40 @@ function createSplashWindow() {
 
     splashWindow.loadFile(SPLASH_PATH);
 
+    if (!isDev) {
+      setTimeout(() => {
+        autoUpdater.checkForUpdates().catch((err) => {
+          log.error("Güncelleme kontrolü hatası:", err);
+          if (splashWindow && !splashWindow.isDestroyed()) {
+            splashWindow.webContents.send(
+              "update-status",
+              "Güncelleme kontrolü başarısız, devam ediliyor..."
+            );
+            setTimeout(() => {
+              if (splashWindow && !splashWindow.isDestroyed()) {
+                splashWindow.destroy();
+              }
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.show();
+              }
+            }, 2000);
+          }
+        });
+      }, 1000);
+    } else {
+      setTimeout(() => {
+        if (splashWindow && !splashWindow.isDestroyed()) {
+          splashWindow.destroy();
+        }
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.show();
+        }
+      }, 2000);
+    }
+
     return splashWindow;
   } catch (error) {
+    log.error("Splash ekranı oluşturma hatası:", error);
     return null;
   }
 }
@@ -898,10 +930,10 @@ if (!gotTheLock) {
   app.on("ready", async () => {
     try {
       await connectDB();
-      createSplashWindow();
-      createWindow();
-      createTray();
       setupAutoUpdater();
+      splashWindow = createSplashWindow();
+      mainWindow = createWindow();
+      createTray();
       setupIpcHandlers();
     } catch (error) {
       log.error("Error in app ready:", error);

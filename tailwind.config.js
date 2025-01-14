@@ -18,6 +18,33 @@ module.exports = {
     },
     extend: {
       colors: {
+        new: {
+          primary: {
+            light: "#F4C4B2", // Açık pastel turuncu (hover/arka plan)
+            DEFAULT: "#EE7C6D", // Ana vurgu rengi (butonlar/aktif durum)
+            dark: "#DD5B4B", // Koyu turuncu-kırmızı (başlıklar)
+          },
+          border: {
+            light: "#FAD4C1", // Soluk pastel turuncu (border hover)
+            DEFAULT: "#EFA174", // Orta ton (varsayılan border)
+            dark: "#D9664C", // Koyu (aktif durum border)
+          },
+          input: {
+            bg: "#FFF5F3", // Açık arka plan (input alanı)
+            focus: "#FFCCB8", // Odaklandığında pastel vurgu
+            text: "#EE7C6D", // Ana metin rengi
+          },
+          card: {
+            bg: "#FDEEE9", // Hafif pastel arka plan
+            hover: "#F4C4B2", // Hover'da hafif vurgu
+            shadow: "#EFA174", // Hafif turuncu gölge
+          },
+          neutral: {
+            white: "#FFFFFF", // Beyaz (arka planlar)
+            black: "#000000", // Siyah (metinler)
+            gray: "#E4E4E4", // Nötr gri tonlar (ayrıcı/boşluklar)
+          },
+        },
         telegram: {
           dark: "#0E0F0F",
           card: "#17181A",

@@ -79,26 +79,26 @@ const Sidebar = ({ onLogout }) => {
 
   return (
     <motion.div
-      className={`text-white flex flex-col transition-all duration-300 ease-in-out ${
+      className={`text-new-neutral-white flex flex-col transition-all duration-300 ease-linear ${
         isCollapsed ? "w-16" : "w-64"
       }`}
       initial={false}
     >
-      <div className="p-4 flex items-center justify-between border-b border-dark-700">
+      <div className="p-4 mx-1 flex items-center justify-between border-b border-new-primary-border-light">
         <div className="flex items-center flex-1 overflow-hidden">
-          <PaperAirplaneIcon className="h-6 w-6 text-primary-500 transform rotate-45" />
+          <PaperAirplaneIcon className="h-6 w-6 text-new-primary-dark transform rotate-45" />
           {!isCollapsed && (
             <div className="ml-3 overflow-hidden">
-              <div className="text-sm font-bold whitespace-nowrap">
+              <div className="text-sm text-new-primary-dark font-bold whitespace-nowrap">
                 Telegram Manager
               </div>
-              <div className="text-xs text-gray-400">v{version}</div>
+              <div className="text-xs text-new-neutral-gray">v{version}</div>
             </div>
           )}
         </div>
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-1 rounded-lg hover:bg-dark-700 transition-colors"
+          className="p-1 rounded-lg text-new-primary-dark hover:bg-new-border-dark hover:text-new-primary-light transition-colors duration-300"
         >
           {isCollapsed ? (
             <ChevronDoubleRightIcon className="h-5 w-5" />
@@ -120,10 +120,8 @@ const Sidebar = ({ onLogout }) => {
               <li key={item.path} className="px-2 py-1">
                 <Link
                   to={item.path}
-                  className={`flex items-center px-2 py-2 rounded-lg transition-colors ${
-                    isActive
-                      ? "bg-primary text-white"
-                      : "text-gray-400 hover:bg-dark-700 hover:text-white"
+                  className={`flex items-center px-2 py-2 rounded-lg transition-colors text-new-neutral-gray ${
+                    isActive ? "bg-new-border-dark" : "hover:bg-new-border-dark"
                   }`}
                 >
                   <Icon
@@ -146,10 +144,10 @@ const Sidebar = ({ onLogout }) => {
         </ul>
       </nav>
 
-      <div className="p-2 border-t border-dark-700">
+      <div className="p-2 border-t border-new-primary-dark">
         <button
           onClick={onLogout}
-          className={`w-full flex items-center justify-center px-2 py-2 rounded-lg text-gray-200 hover:bg-telegram-error/80 hover:text-white transition-colors duration-300 ${
+          className={`w-full flex items-center justify-center px-2 py-2 rounded-lg text-new-neutral-gray hover:bg-new-border-dark hover:text-new-neutral-white transition-colors duration-300 ${
             isCollapsed ? "px-3" : "px-4"
           }`}
         >

@@ -407,7 +407,7 @@ const Dashboard = () => {
               ></i>
             </div>
             <div>
-              <div className="text-white">
+              <div className="text-new-neutral-white">
                 {systemInfo.updateAvailable
                   ? "Güncelleme Mevcut"
                   : "Sistem Güncel"}
