@@ -53,6 +53,7 @@ function createSplashWindow() {
       },
       center: true,
       icon: ICON_PATH,
+      show: true,
     });
 
     enable(splashWindow.webContents);
@@ -923,17 +924,42 @@ if (!gotTheLock) {
         "update-status",
         "Veritabanına bağlanılıyor..."
       );
-      await connectDB();
+
+      try {
+        await connectDB();
+        splashWindow.webContents.send(
+          "update-status",
+          "MongoDB bağlantısı başarılı!"
+        );
+      } catch (error) {
+        log.error("MongoDB bağlantı hatası:", error);
+        dialog.showErrorBox(
+          "Veritabanı Hatası",
+          "MongoDB bağlantısı başarısız oldu. Uygulama kapatılıyor."
+        );
+        app.quit();
+        return;
+      }
 
       mainWindow = createWindow();
       mainWindow.hide();
       createTray();
       setupIpcHandlers();
+
+      setTimeout(() => {
+        if (splashWindow && !splashWindow.isDestroyed()) {
+          splashWindow.destroy();
+        }
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.show();
+        }
+      }, 1000);
     } catch (error) {
       log.error("Error in app ready:", error);
       if (splashWindow && !splashWindow.isDestroyed()) {
         splashWindow.destroy();
       }
+      app.quit();
     }
   });
 }

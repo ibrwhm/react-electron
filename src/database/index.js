@@ -12,17 +12,21 @@ const envPath = app.isPackaged
 require("dotenv").config({ path: envPath });
 
 const connectionOptions = {
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
+  serverSelectionTimeoutMS: 3000,
+  socketTimeoutMS: 30000,
   family: 4,
-  maxPoolSize: 10,
-  minPoolSize: 2,
-  connectTimeoutMS: 10000,
-  heartbeatFrequencyMS: 30000,
+  maxPoolSize: 5,
+  minPoolSize: 1,
+  connectTimeoutMS: 5000,
+  heartbeatFrequencyMS: 10000,
+  retryWrites: true,
+  w: "majority",
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
 };
 
-const maxRetries = 3;
-const retryDelay = 5000;
+const maxRetries = 2;
+const retryDelay = 2000;
 
 let retryCount = 0;
 let isConnected = false;
@@ -60,15 +64,37 @@ const connectWithRetry = async () => {
         throw new Error("MONGODB_URI environment variable is not defined");
       }
 
-      await mongoose.connect(process.env.MONGODB_URI, connectionOptions);
+      if (mongoose.connection.readyState !== 0) {
+        await mongoose.connection.close();
+      }
+
+      await Promise.race([
+        mongoose.connect(process.env.MONGODB_URI, connectionOptions),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Bağlantı zaman aşımı")),
+            connectionOptions.connectTimeoutMS
+          )
+        ),
+      ]);
     }
   } catch (error) {
     log.error(
       `MongoDB bağlantı hatası (Deneme ${retryCount}/${maxRetries}):`,
-      error
+      error.message
     );
+
+    if (
+      error.message.includes("ENOTFOUND") ||
+      error.message.includes("Authentication failed") ||
+      error.message.includes("MONGODB_URI environment variable is not defined")
+    ) {
+      throw error;
+    }
+
     if (retryCount < maxRetries) {
-      setTimeout(connectWithRetry, retryDelay);
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      return connectWithRetry();
     } else {
       log.error(
         "MongoDB bağlantısı başarısız oldu, maksimum deneme sayısına ulaşıldı"
