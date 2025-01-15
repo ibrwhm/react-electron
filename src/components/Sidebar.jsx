@@ -7,14 +7,13 @@ import {
   VideoCameraIcon,
   RectangleGroupIcon,
   KeyIcon,
-  Cog6ToothIcon,
   PhoneIcon,
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
   PaperAirplaneIcon,
   ArrowLeftCircleIcon,
 } from "@heroicons/react/24/outline";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 const Sidebar = ({ onLogout }) => {
   const location = useLocation();
@@ -67,7 +66,7 @@ const Sidebar = ({ onLogout }) => {
       path: "/sessions",
       icon: PhoneIcon,
       text: "Session Yönetimi",
-      adminOnly: true,
+      adminOnly: false,
     },
     {
       path: "/licenses",
@@ -79,26 +78,44 @@ const Sidebar = ({ onLogout }) => {
 
   return (
     <motion.div
-      className={`text-new-neutral-white flex flex-col transition-all duration-300 ease-linear ${
-        isCollapsed ? "w-16" : "w-64"
+      className={`bg-telegram-card/30 backdrop-blur-xl border-r border-telegram-border/10 flex flex-col transition-all duration-300 ease-in-out ${
+        isCollapsed ? "w-20" : "w-72"
       }`}
       initial={false}
     >
-      <div className="p-4 mx-1 flex items-center justify-between border-b border-new-primary-border-light">
-        <div className="flex items-center flex-1 overflow-hidden">
-          <PaperAirplaneIcon className="h-6 w-6 text-new-primary-dark transform rotate-45" />
-          {!isCollapsed && (
-            <div className="ml-3 overflow-hidden">
-              <div className="text-sm text-new-primary-dark font-bold whitespace-nowrap">
-                Telegram Manager
-              </div>
-              <div className="text-xs text-new-neutral-gray">v{version}</div>
+      {/* Header */}
+      <div className="p-4 flex items-center justify-between border-b border-telegram-border/10">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={isCollapsed ? "collapsed" : "expanded"}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex items-center flex-1 overflow-hidden"
+          >
+            <div className="relative w-10 h-10 flex items-center justify-center bg-telegram-primary/10 rounded-xl">
+              <PaperAirplaneIcon className="h-5 w-5 text-telegram-primary transform rotate-45" />
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-telegram-card" />
             </div>
-          )}
-        </div>
+            {!isCollapsed && (
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="ml-3 overflow-hidden"
+              >
+                <h1 className="text-sm font-bold bg-gradient-to-r from-telegram-primary to-blue-400 bg-clip-text text-transparent whitespace-nowrap">
+                  Telegram Manager
+                </h1>
+                <p className="text-xs text-telegram-secondary">v{version}</p>
+              </motion.div>
+            )}
+          </motion.div>
+        </AnimatePresence>
+
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-1 rounded-lg text-new-primary-dark hover:bg-new-border-dark hover:text-new-primary-light transition-colors duration-300"
+          className="p-2 rounded-lg text-telegram-secondary hover:bg-telegram-card/50 hover:text-telegram-primary transition-all duration-200"
         >
           {isCollapsed ? (
             <ChevronDoubleRightIcon className="h-5 w-5" />
@@ -108,53 +125,81 @@ const Sidebar = ({ onLogout }) => {
         </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto">
-        <ul className="py-4">
-          {menuItems.map((item) => {
-            if (item.adminOnly && !isAdmin) return null;
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto py-4 px-3">
+        <AnimatePresence mode="wait">
+          <motion.ul layout className="space-y-2">
+            {menuItems.map((item) => {
+              if (item.adminOnly && !isAdmin) return null;
 
-            const isActive = location.pathname === item.path;
-            const Icon = item.icon;
+              const isActive = location.pathname === item.path;
+              const Icon = item.icon;
 
-            return (
-              <li key={item.path} className="px-2 py-1">
-                <Link
-                  to={item.path}
-                  className={`flex items-center px-2 py-2 rounded-lg transition-colors text-new-neutral-gray ${
-                    isActive ? "bg-new-border-dark" : "hover:bg-new-border-dark"
-                  }`}
+              return (
+                <motion.li
+                  key={item.path}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
                 >
-                  <Icon
-                    className={`h-5 w-5 ${isCollapsed ? "mx-auto" : "mr-3"}`}
-                  />
-                  {!isCollapsed && (
-                    <motion.span
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="whitespace-nowrap"
+                  <Link
+                    to={item.path}
+                    className={`flex items-center px-3 py-2.5 rounded-xl transition-all duration-200 group ${
+                      isActive
+                        ? "bg-telegram-primary text-white"
+                        : "text-telegram-secondary hover:bg-telegram-card/50 hover:text-white"
+                    }`}
+                  >
+                    <div
+                      className={`p-2 rounded-lg ${
+                        isActive
+                          ? "bg-white/10"
+                          : "bg-telegram-card/30 group-hover:bg-telegram-card/50"
+                      }`}
                     >
-                      {item.text}
-                    </motion.span>
-                  )}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+                      <Icon
+                        className={`h-5 w-5 transition-transform duration-200 ${
+                          isCollapsed ? "mx-auto" : ""
+                        } ${isActive ? "" : "group-hover:scale-110"}`}
+                      />
+                    </div>
+                    {!isCollapsed && (
+                      <motion.span
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="ml-3 whitespace-nowrap font-medium"
+                      >
+                        {item.text}
+                      </motion.span>
+                    )}
+                  </Link>
+                </motion.li>
+              );
+            })}
+          </motion.ul>
+        </AnimatePresence>
       </nav>
 
-      <div className="p-2 border-t border-new-primary-dark">
+      {/* Footer */}
+      <div className="p-3 border-t border-telegram-border/10">
         <button
           onClick={onLogout}
-          className={`w-full flex items-center justify-center px-2 py-2 rounded-lg text-new-neutral-gray hover:bg-new-border-dark hover:text-new-neutral-white transition-colors duration-300 ${
-            isCollapsed ? "px-3" : "px-4"
-          }`}
+          className={`w-full flex items-center px-3 py-2.5 rounded-xl hover:bg-red-500/10 group transition-all duration-200`}
         >
-          <ArrowLeftCircleIcon
-            className={`h-5 w-5 ${isCollapsed ? "" : "mr-3"}`}
-          />
-          {!isCollapsed && <span className="whitespace-nowrap">Çıkış Yap</span>}
+          <div className="p-2 rounded-lg bg-telegram-card/30 group-hover:bg-red-500/20">
+            <ArrowLeftCircleIcon className="h-5 w-5 text-telegram-secondary group-hover:text-red-500" />
+          </div>
+          {!isCollapsed && (
+            <motion.span
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="ml-3 font-medium text-telegram-secondary group-hover:text-red-500"
+            >
+              Çıkış Yap
+            </motion.span>
+          )}
         </button>
       </div>
     </motion.div>

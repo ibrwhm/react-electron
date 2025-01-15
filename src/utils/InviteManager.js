@@ -6,13 +6,32 @@ class InviteManager {
   constructor() {
     this.loggedInSessions = [];
     this.inviteSystem = {
-      isRunning: false,
+      isActive: false,
       progress: {
-        total: 0,
         success: 0,
         fail: 0,
       },
+      members: [],
+      limit: 1,
+      targetGroup: null,
+      message: "",
     };
+  }
+
+  resetProgress() {
+    this.inviteSystem.progress = {
+      success: 0,
+      fail: 0,
+    };
+    this.inviteSystem.members = [];
+    this.inviteSystem.isActive = false;
+    this.inviteSystem.message = "";
+  }
+
+  playNotificationSound() {
+    if (global.mainWindow) {
+      global.mainWindow.webContents.send("play-notification");
+    }
   }
 
   async loginWithSessions() {
@@ -324,6 +343,7 @@ class InviteManager {
           success: 0,
           fail: 0,
         },
+        message: "",
       };
 
       this.startInviteProcess();
@@ -357,15 +377,26 @@ class InviteManager {
     let sessionIndex = 0;
 
     const updateProgress = (finished = false, message = "") => {
-      if (global.mainWindow) {
-        global.mainWindow.webContents.send("invite-progress", {
-          success: this.inviteSystem.progress.success,
-          fail: this.inviteSystem.progress.fail,
-          finished,
-          message,
-        });
+      if (!global.mainWindow) return;
+
+      this.inviteSystem.message = message;
+
+      const progressData = {
+        success: this.inviteSystem.progress.success,
+        fail: this.inviteSystem.progress.fail,
+        finished,
+        message,
+      };
+
+      global.mainWindow.webContents.send("invite-progress", progressData);
+
+      if (message) {
+        this.playNotificationSound();
       }
     };
+
+    await wait(5000);
+    updateProgress(false, "Davet işlemi başlatılıyor...");
 
     while (this.inviteSystem.members.length > 0 && this.inviteSystem.isActive) {
       const currentSession = this.loggedInSessions[sessionIndex];
@@ -378,9 +409,11 @@ class InviteManager {
         );
 
         if (allLimitsReached) {
-          this.inviteSystem.isActive = false;
           const message = `Tüm sessionların limiti doldu. Toplam ${this.inviteSystem.progress.success} başarılı davet yapıldı.`;
           updateProgress(true, message);
+          await wait(2000);
+          this.inviteSystem.isActive = false;
+          this.resetProgress();
           return;
         }
         continue;
@@ -389,7 +422,6 @@ class InviteManager {
       const user = this.inviteSystem.members.shift();
       if (!user || !user.username) {
         this.inviteSystem.progress.fail++;
-        updateProgress();
         continue;
       }
 
@@ -404,50 +436,93 @@ class InviteManager {
 
         sessionLimits.set(currentSession.phoneNumber, currentLimit + 1);
         this.inviteSystem.progress.success++;
-        updateProgress();
+        updateProgress(false, `@${user.username} başarıyla davet edildi`);
 
         await wait(30000);
       } catch (error) {
         this.inviteSystem.progress.fail++;
-        updateProgress();
+        let errorMessage = "";
 
         switch (error.errorMessage) {
           case "USER_PRIVACY_RESTRICTED":
+            errorMessage = `@${user.username} gizlilik ayarları nedeniyle davet edilemedi`;
             break;
           case "USER_NOT_MUTUAL_CONTACT":
+            errorMessage = `@${user.username} karşılıklı iletişim olmadığı için davet edilemedi`;
             break;
           case "PEER_FLOOD":
+            errorMessage = `Spam koruması nedeniyle @${user.username} davet edilemedi. 2 dakika bekleniyor...`;
+            sessionLimits.set(currentSession.phoneNumber, -1);
+            sessionIndex = (sessionIndex + 1) % sessionCount;
+
+            let nextSession = this.loggedInSessions[sessionIndex];
+            let attempts = 0;
+
+            while (
+              sessionLimits.get(nextSession.phoneNumber) === -1 &&
+              attempts < sessionCount
+            ) {
+              sessionIndex = (sessionIndex + 1) % sessionCount;
+              nextSession = this.loggedInSessions[sessionIndex];
+              attempts++;
+            }
+
+            const allSessionsFlooded = Array.from(sessionLimits.values()).every(
+              (limit) => limit === -1
+            );
+
+            if (allSessionsFlooded) {
+              const message =
+                "Tüm sessionlar spam korumasında. İşlem durduruluyor...";
+              updateProgress(true, message);
+              this.inviteSystem.isActive = false;
+              this.resetProgress();
+              return;
+            }
+
+            if (sessionLimits.get(nextSession.phoneNumber) === -1) {
+              this.inviteSystem.members.unshift(user);
+            }
+
+            await wait(120000);
             break;
           default:
-            throw new Error(
-              `Davet hatası (${user.username}): ${error.errorMessage}`
-            );
+            errorMessage = `@${user.username} davet edilemedi: ${error.errorMessage}`;
         }
 
-        if (
-          error.errorMessage?.includes("PEER_FLOOD") ||
-          error.errorMessage?.includes("SPAM")
-        ) {
-          sessionIndex = (sessionIndex + 1) % sessionCount;
-          await wait(120000);
-        }
-
-        await wait(5000);
+        await wait(10000);
       }
 
-      updateProgress();
       sessionIndex = (sessionIndex + 1) % sessionCount;
     }
 
-    this.inviteSystem.isActive = false;
-    const finalMessage = `İşlem tamamlandı. ${this.inviteSystem.progress.success} başarılı, ${this.inviteSystem.progress.fail} başarısız davet.`;
-    updateProgress(true, finalMessage);
+    if (this.inviteSystem.isActive) {
+      const message = `Davet işlemi tamamlandı. Toplam ${this.inviteSystem.progress.success} başarılı davet yapıldı.`;
+      updateProgress(true, message);
+      await wait(2000);
+      this.inviteSystem.isActive = false;
+      this.resetProgress();
+    }
   }
 
   stopInviteSystem() {
-    if (this.inviteSystem) {
-      this.inviteSystem.isActive = false;
-      return { success: true, message: "Sistem durduruldu" };
+    if (this.inviteSystem.isActive) {
+      const message = `Davet işlemi durduruldu. Toplam ${this.inviteSystem.progress.success} başarılı davet yapıldı.`;
+
+      if (global.mainWindow) {
+        global.mainWindow.webContents.send("invite-progress", {
+          success: this.inviteSystem.progress.success,
+          fail: this.inviteSystem.progress.fail,
+          finished: true,
+          message,
+        });
+        this.playNotificationSound();
+
+        setTimeout(() => {
+          this.inviteSystem.isActive = false;
+          this.resetProgress();
+        }, 2000);
+      }
     }
   }
 }

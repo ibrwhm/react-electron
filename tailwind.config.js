@@ -20,29 +20,29 @@ module.exports = {
       colors: {
         new: {
           primary: {
-            light: "#F4C4B2", // Açık pastel turuncu (hover/arka plan)
-            DEFAULT: "#EE7C6D", // Ana vurgu rengi (butonlar/aktif durum)
-            dark: "#DD5B4B", // Koyu turuncu-kırmızı (başlıklar)
+            light: "#F4C4B2",
+            DEFAULT: "#EE7C6D",
+            dark: "#DD5B4B",
           },
           border: {
-            light: "#FAD4C1", // Soluk pastel turuncu (border hover)
-            DEFAULT: "#EFA174", // Orta ton (varsayılan border)
-            dark: "#D9664C", // Koyu (aktif durum border)
+            light: "#FAD4C1",
+            DEFAULT: "#EFA174",
+            dark: "#D9664C",
           },
           input: {
-            bg: "#FFF5F3", // Açık arka plan (input alanı)
-            focus: "#FFCCB8", // Odaklandığında pastel vurgu
-            text: "#EE7C6D", // Ana metin rengi
+            bg: "#FFF5F3",
+            focus: "#FFCCB8",
+            text: "#EE7C6D",
           },
           card: {
-            bg: "#FDEEE9", // Hafif pastel arka plan
-            hover: "#F4C4B2", // Hover'da hafif vurgu
-            shadow: "#EFA174", // Hafif turuncu gölge
+            bg: "#FDEEE9",
+            hover: "#F4C4B2",
+            shadow: "#EFA174",
           },
           neutral: {
-            white: "#FFFFFF", // Beyaz (arka planlar)
-            black: "#000000", // Siyah (metinler)
-            gray: "#E4E4E4", // Nötr gri tonlar (ayrıcı/boşluklar)
+            white: "#FFFFFF",
+            black: "#000000",
+            gray: "#E4E4E4",
           },
         },
         telegram: {

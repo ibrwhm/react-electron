@@ -30,16 +30,18 @@ class LicenseManager {
   }
 
   async initStore() {
-    if (this.store) return;
-
     try {
+      if (this.store) return;
+
       const { default: Store } = await import("electron-store");
       this.store = new Store({
         name: "license-manager",
         encryptionKey: "krishnay",
         cwd: this.storeDir,
+        clearInvalidConfig: true,
       });
     } catch (error) {
+      console.error("Store başlatma hatası:", error);
       throw error;
     }
   }
@@ -112,75 +114,118 @@ class LicenseManager {
     }
   }
 
-  async validateLicense(key) {
+  async validateLicense(key, isManualLogin = true) {
     try {
       if (!key) {
-        return { valid: false, message: "Lisans anahtarı bulunamadı" };
+        return { success: false, message: "Lisans anahtarı bulunamadı" };
       }
 
+      const now = new Date();
+      const lastValidation = this._lastValidation?.[key];
+      if (lastValidation && now - lastValidation < 1000) {
+        return (
+          this._lastValidationResult?.[key] || {
+            success: false,
+            message: "Doğrulama sonucu bulunamadı",
+          }
+        );
+      }
+
+      if (!this._lastValidation) this._lastValidation = {};
+      if (!this._lastValidationResult) this._lastValidationResult = {};
+      this._lastValidation[key] = now;
+
       if (this.isDevelopment && this.testLicenses[key]) {
-        return { valid: true, license: this.testLicenses[key] };
+        const result = { success: true, data: this.testLicenses[key] };
+        this._lastValidationResult[key] = result;
+        return result;
       }
 
       const mongoose = require("mongoose");
       if (mongoose.connection.readyState !== 1) {
-        return {
-          valid: false,
+        const result = {
+          success: false,
           message: "Veritabanı bağlantısı bekleniyor, lütfen tekrar deneyin",
         };
+        this._lastValidationResult[key] = result;
+        return result;
       }
 
-      const license = await LicenseModel.findOne({ key });
+      const license = await LicenseModel.findOne({
+        key: key.trim().toUpperCase(),
+      });
 
       if (!license) {
-        return { valid: false, message: "Geçersiz lisans anahtarı" };
+        const result = { success: false, message: "Geçersiz lisans anahtarı" };
+        this._lastValidationResult[key] = result;
+        return result;
       }
 
       if (!license.isActive) {
-        return { valid: false, message: "Bu lisans deaktif edilmiş" };
+        const result = { success: false, message: "Bu lisans deaktif edilmiş" };
+        this._lastValidationResult[key] = result;
+        return result;
       }
 
-      const now = new Date();
       const expiryDate = new Date(license.expiresAt);
 
       if (now > expiryDate) {
-        return { valid: false, message: "Lisans süresi dolmuş" };
+        const result = { success: false, message: "Lisans süresi dolmuş" };
+        this._lastValidationResult[key] = result;
+        return result;
       }
 
       const hardwareId = await this.getHardwareId();
 
       if (license.hardwareId && license.hardwareId !== hardwareId) {
-        return { valid: false, message: "Bu lisans başka bir cihazda aktif" };
+        const result = {
+          success: false,
+          message: "Bu lisans başka bir cihazda aktif",
+        };
+        this._lastValidationResult[key] = result;
+        return result;
       }
 
-      // Lisans geçerliyse ve bu cihaz için ilk kullanımsa
+      let shouldUpdate = false;
+
       if (!license.hardwareId) {
         license.hardwareId = hardwareId;
+        shouldUpdate = true;
       }
 
-      license.lastLoginAt = now;
-      if (!license.loginHistory) license.loginHistory = [];
+      if (isManualLogin) {
+        license.lastLoginAt = now;
+        if (!license.loginHistory) license.loginHistory = [];
+        license.loginHistory = license.loginHistory.slice(-9);
+        license.loginHistory.push({
+          date: now,
+          deviceInfo: {
+            platform: os.platform(),
+            hostname: os.hostname(),
+          },
+        });
+        shouldUpdate = true;
+      }
 
-      license.loginHistory.push({
-        date: now,
-        deviceInfo: {
-          platform: os.platform(),
-          hostname: os.hostname(),
-        },
-      });
+      if (shouldUpdate) {
+        await license.save();
+      }
 
-      await license.save();
       this.store.set("currentLicense", key);
 
-      return {
-        valid: true,
-        license: license.toObject(),
+      const result = {
+        success: true,
+        data: license.toObject(),
       };
+      this._lastValidationResult[key] = result;
+      return result;
     } catch (error) {
-      return {
-        valid: false,
+      const result = {
+        success: false,
         message: error.message || "Lisans doğrulanırken bir hata oluştu",
       };
+      this._lastValidationResult[key] = result;
+      return result;
     }
   }
 
@@ -189,40 +234,47 @@ class LicenseManager {
       const storedKey = this.store.get("currentLicense");
 
       if (!storedKey) {
-        return { valid: false, message: "Kayıtlı lisans bulunamadı" };
+        return { success: false, message: "Kayıtlı lisans bulunamadı" };
       }
 
-      if (this.isDevelopment && this.testLicenses[storedKey]) {
-        return { valid: true, license: this.testLicenses[storedKey] };
-      }
+      // Otomatik kontrol için validateLicense'ı çağırırken isManualLogin=false
+      const result = await this.validateLicense(storedKey, false);
 
-      const license = await LicenseModel.findOne({ key: storedKey });
-      if (!license) {
+      if (!result.success) {
         this.store.delete("currentLicense");
-        return { valid: false, message: "Lisans bulunamadı" };
       }
 
-      if (!license.isActive) {
-        this.store.delete("currentLicense");
-        return { valid: false, message: "Bu lisans deaktif edilmiş" };
-      }
-
-      const hardwareId = await this.getHardwareId();
-      if (license.hardwareId && license.hardwareId !== hardwareId) {
-        this.store.delete("currentLicense");
-        return { valid: false, message: "Bu lisans başka bir cihazda aktif" };
-      }
-
-      return { valid: true, license: license.toObject() };
+      return result;
     } catch (error) {
-      return { valid: false, message: "Bir hata oluştu" };
+      return { success: false, message: "Bir hata oluştu" };
     }
   }
 
   async storeLicense(key) {
-    await this.initStore();
-    this.store.set("currentLicense", key);
-    return true;
+    try {
+      await this.initStore();
+
+      const validationResult = await this.validateLicense(key);
+      if (!validationResult.success) {
+        return {
+          success: false,
+          message: validationResult.message,
+        };
+      }
+
+      this.store.set("currentLicense", key);
+
+      return {
+        success: true,
+        message: "Lisans başarıyla kaydedildi",
+      };
+    } catch (error) {
+      console.error("Lisans kaydetme hatası:", error);
+      return {
+        success: false,
+        message: error.message || "Lisans kaydedilirken bir hata oluştu",
+      };
+    }
   }
 
   async deleteLicense(key) {

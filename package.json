@@ -1,7 +1,7 @@
 {
   "name": "telegram-manager",
   "productName": "Telegram Manager",
-  "version": "1.0.35",
+  "version": "1.0.36",
   "description": "Telegram Manager",
   "author": {
     "name": "Rio",
@@ -76,6 +76,7 @@
     "postcss": "^8.4.49",
     "rimraf": "^6.0.1",
     "tailwindcss": "^3.4.17",
+    "terser": "^5.37.0",
     "vite": "^6.0.7",
     "wait-on": "^8.0.2"
   },
@@ -90,8 +91,7 @@
       "splash.html",
       "src/**/*",
       "build/**/*",
-      "dist/**/*",
-      ".env"
+      "dist/**/*"
     ],
     "extraResources": [
       {
@@ -111,8 +111,11 @@
         "to": "splash.html"
       },
       {
-        "from": ".env",
-        "to": ".env"
+        "from": "public",
+        "to": "public",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "asarUnpack": [
@@ -132,7 +135,7 @@
           ]
         }
       ],
-      "icon": "build/icon.png",
+      "icon": "build/icon.ico",
       "artifactName": "Telegram.Manager.Setup.${version}.exe",
       "signAndEditExecutable": false
     },

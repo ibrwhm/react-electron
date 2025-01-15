@@ -7,7 +7,6 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 
 class VideoManager {
   constructor() {
-    this.videoDir = path.join(app.getPath("userData"), "uploads");
     this.storeDir = path.join(app.getPath("userData"), "store");
     this.compressedDir = path.join(app.getPath("userData"), "compressed");
     this.store = null;
@@ -15,9 +14,18 @@ class VideoManager {
     this.message = "";
     this.defaultTimes = ["09:00", "12:00", "15:00", "18:00", "21:00", "23:00"];
     this.mainWindow = null;
+    this.uploadProgress = {
+      status: "beklemede",
+      current: 0,
+      total: 0,
+      filename: "",
+      stage: "başlatılmadı",
+    };
 
-    this.initStore();
-    this.ensureDirectories();
+    (async () => {
+      await this.initStore();
+      await this.ensureDirectories();
+    })();
   }
 
   setMainWindow(window) {
@@ -28,16 +36,23 @@ class VideoManager {
     if (this.store) return;
 
     try {
-      const { default: Store } = await import("electron-store");
+      const Store = (await import("electron-store")).default;
+
       this.store = new Store({
         name: "video-manager",
-        encryptionKey: "krishnay",
         cwd: this.storeDir,
         defaults: {
           videos: [],
           sendTimes: this.defaultTimes,
           schedulerStatus: false,
           message: "",
+          uploadProgress: {
+            status: "beklemede",
+            current: 0,
+            total: 0,
+            filename: "",
+            stage: "başlatılmadı",
+          },
           telegramBot: {
             token: "",
             isEnabled: false,
@@ -47,20 +62,15 @@ class VideoManager {
         },
       });
 
-      const currentTimes = this.store.get("sendTimes");
-      const currentTelegramBot = this.store.get("telegramBot");
-
-      if (!currentTimes) {
-        this.store.set("sendTimes", this.defaultTimes);
+      if (!this.store) {
+        throw new Error("Store initialization failed");
       }
 
-      if (!currentTelegramBot) {
-        this.store.set("telegramBot", {
-          token: "",
-          isEnabled: false,
-          lastError: "",
-          lastSuccess: "",
-        });
+      const currentProgress = this.store.get("uploadProgress");
+      if (!currentProgress) {
+        this.store.set("uploadProgress", this.uploadProgress);
+      } else {
+        this.uploadProgress = currentProgress;
       }
     } catch (error) {
       throw error;
@@ -68,7 +78,6 @@ class VideoManager {
   }
 
   async ensureDirectories() {
-    await fs.ensureDir(this.videoDir);
     await fs.ensureDir(this.storeDir);
     await fs.ensureDir(this.compressedDir);
   }
@@ -105,111 +114,153 @@ class VideoManager {
 
   async saveVideo({ filePath, description, channelLink }) {
     try {
+      if (!filePath) {
+        throw new Error("Dosya yolu gerekli");
+      }
+
       if (!channelLink) {
         throw new Error("Kanal linki gerekli");
       }
 
       let formattedChannelLink = channelLink;
-      if (channelLink.startsWith("@")) {
-        formattedChannelLink = `https://t.me/${channelLink.substring(1)}`;
-      } else if (!channelLink.startsWith("https://t.me/")) {
-        formattedChannelLink = `https://t.me/${channelLink}`;
+      try {
+        if (channelLink.startsWith("@")) {
+          formattedChannelLink = `https://t.me/${channelLink.substring(1)}`;
+        } else if (!channelLink.startsWith("https://t.me/")) {
+          formattedChannelLink = `https://t.me/${channelLink}`;
+        }
+      } catch (error) {
+        throw new Error("Kanal linki formatlanamadı");
       }
 
-      if (!filePath || typeof filePath !== "string") {
-        throw new Error("Geçerli bir dosya yolu gerekli");
+      try {
+        if (typeof filePath !== "string") {
+          throw new Error("Geçerli bir dosya yolu gerekli");
+        }
+
+        if (!fs.existsSync(filePath)) {
+          throw new Error("Dosya bulunamadı: " + filePath);
+        }
+      } catch (error) {
+        throw error;
       }
 
-      if (!fs.existsSync(filePath)) {
-        throw new Error("Dosya bulunamadı: " + filePath);
+      let stats, fileSizeInMB, filename;
+      try {
+        stats = fs.statSync(filePath);
+        fileSizeInMB = stats.size / (1024 * 1024);
+        filename = path.basename(filePath);
+      } catch (error) {
+        throw new Error("Dosya bilgileri alınamadı");
       }
 
-      const stats = fs.statSync(filePath);
-      const fileSizeInMB = stats.size / (1024 * 1024);
-
-      let targetPath = path.join(
-        this.videoDir,
-        `${Date.now()}_${path.basename(filePath)}`
-      );
-
-      this.store.set("uploadProgress", {
-        status: "başlıyor",
-        percent: 0,
-        fileName: path.basename(filePath),
-        stage: "başlatılıyor",
-      });
-
-      if (fileSizeInMB > 50) {
-        this.store.set("uploadProgress", {
-          status: "sıkıştırılıyor",
-          percent: 0,
-          fileName: path.basename(filePath),
-          stage: "sıkıştırma",
-        });
-        targetPath = await this.compressVideo(filePath);
-      } else {
-        this.store.set("uploadProgress", {
-          status: "kopyalanıyor",
-          percent: 50,
-          fileName: path.basename(filePath),
-          stage: "kopyalama",
-        });
-        await fs.promises.copyFile(filePath, targetPath);
-      }
-
-      this.store.set("uploadProgress", {
-        status: "kaydediliyor",
-        percent: 90,
-        fileName: path.basename(filePath),
-        stage: "kayıt",
-      });
-
-      const videos = this.store.get("videos", []);
-      let channel = videos.find((c) => c.channelLink === formattedChannelLink);
-
-      if (!channel) {
-        channel = {
-          _id: Date.now().toString(),
-          channelLink: formattedChannelLink,
-          videos: [],
+      try {
+        const initialProgress = {
+          status: "başlıyor",
+          current: 0,
+          total: stats.size,
+          filename: filename,
+          stage: "başlatılıyor",
         };
-        videos.push(channel);
+        this.updateProgress(initialProgress);
+      } catch (error) {
+        throw error;
       }
 
-      channel.videos.push({
-        _id: Date.now().toString(),
-        filename: path.basename(targetPath),
-        originalPath: filePath,
-        savedPath: targetPath,
-        description: description || "",
-        status: "pending",
-        error: null,
-        sentAt: null,
-        createdAt: new Date().toISOString(),
-        size: fs.statSync(targetPath).size,
-        originalSize: stats.size,
-        compressed: fileSizeInMB > 50,
-      });
+      let finalPath = filePath;
+      let needsCompression = fileSizeInMB > 50;
 
-      this.store.set("videos", videos);
+      if (needsCompression) {
+        try {
+          const compressionStartProgress = {
+            status: "sıkıştırılıyor",
+            current: 0,
+            total: stats.size,
+            filename: filename,
+            stage: "sıkıştırma",
+          };
+          this.updateProgress(compressionStartProgress);
 
-      this.store.set("uploadProgress", {
-        status: "tamamlandı",
-        percent: 100,
-        fileName: path.basename(filePath),
-        stage: "tamamlandı",
-      });
+          finalPath = await this.compressVideo(filePath, filename);
+        } catch (error) {
+          console.error("Sıkıştırma hatası:", error);
+          finalPath = filePath;
+          needsCompression = false;
+        }
+      }
 
-      return { success: true };
+      try {
+        const videos = this.store.get("videos", []);
+        let channel = videos.find(
+          (c) => c.channelLink === formattedChannelLink
+        );
+
+        if (!channel) {
+          channel = {
+            _id: Date.now().toString(),
+            channelLink: formattedChannelLink,
+            videos: [],
+          };
+          videos.push(channel);
+        }
+
+        const existingVideo = channel.videos.find(
+          (v) => v.savedPath === finalPath || v.originalPath === filePath
+        );
+
+        if (existingVideo) {
+          throw new Error("Bu video zaten eklenmiş");
+        }
+
+        const finalStats = fs.statSync(finalPath);
+
+        const videoEntry = {
+          _id: Date.now().toString(),
+          filename: filename,
+          originalPath: filePath,
+          savedPath: finalPath,
+          description: description || "",
+          status: "pending",
+          error: null,
+          sentAt: null,
+          createdAt: new Date().toISOString(),
+          originalSize: stats.size,
+          size: finalStats.size,
+          compressed: needsCompression,
+        };
+
+        channel.videos.push(videoEntry);
+        this.store.set("videos", videos);
+
+        const finalProgress = {
+          status: "tamamlandı",
+          current: finalStats.size,
+          total: finalStats.size,
+          filename: filename,
+          stage: "tamamlandı",
+        };
+        this.updateProgress(finalProgress);
+
+        return { success: true, video: videoEntry };
+      } catch (error) {
+        throw error;
+      }
     } catch (error) {
-      this.store.set("uploadProgress", {
-        status: "hata",
-        percent: 0,
-        fileName: path.basename(filePath),
-        stage: "hata",
-        error: error.message,
-      });
-      throw new Error("Video kaydedilemedi: " + error.message);
+      try {
+        const errorProgress = {
+          status: "hata",
+          current: 0,
+          total: 0,
+          filename: path.basename(filePath),
+          stage: "hata",
+          error: error.message,
+        };
+        this.updateProgress(errorProgress);
+      } catch (progressError) {
+        throw progressError;
+      }
+
+      throw error;
     }
   }
 
@@ -219,26 +270,29 @@ class VideoManager {
       const channelIndex = videos.findIndex((c) => c._id === channelId);
 
       if (channelIndex === -1) {
-        throw new Error("Kanal bulunamadı");
+        return { success: false, error: "Kanal bulunamadı" };
       }
 
-      const videoIndex = videos[channelIndex].videos.findIndex(
-        (v) => v._id === videoId
-      );
+      const channel = videos[channelIndex];
+      const videoIndex = channel.videos.findIndex((v) => v._id === videoId);
+
       if (videoIndex === -1) {
-        throw new Error("Video bulunamadı");
+        return { success: false, error: "Video bulunamadı" };
       }
 
-      videos[channelIndex].videos.splice(videoIndex, 1);
+      channel.videos.splice(videoIndex, 1);
 
-      if (videos[channelIndex].videos.length === 0) {
+      if (channel.videos.length === 0) {
         videos.splice(channelIndex, 1);
+      } else {
+        videos[channelIndex] = channel;
       }
 
       this.store.set("videos", videos);
       return { success: true };
     } catch (error) {
-      throw error;
+      console.error("Video silme hatası:", error);
+      return { success: false, error: error.message };
     }
   }
 
@@ -444,12 +498,11 @@ class VideoManager {
         throw new Error("Video dosyası bulunamadı: " + video.savedPath);
       }
 
-      let videoPath = video.savedPath;
-      const stats = fs.statSync(videoPath);
+      const stats = fs.statSync(video.savedPath);
       const fileSizeInMB = stats.size / (1024 * 1024);
 
       if (fileSizeInMB > 50) {
-        videoPath = await this.compressVideo(videoPath);
+        throw new Error("Video boyutu 50MB'dan büyük");
       }
 
       const TelegramBot = await import("node-telegram-bot-api");
@@ -459,15 +512,11 @@ class VideoManager {
         });
       }
 
-      const videoStream = fs.createReadStream(videoPath);
+      const videoStream = fs.createReadStream(video.savedPath);
       await this.telegramBot.sendVideo(channelId, videoStream, {
         caption: video.description || "",
         contentType: "video/mp4",
       });
-
-      if (videoPath !== video.savedPath) {
-        fs.unlinkSync(videoPath);
-      }
 
       settings.lastSuccess = new Date().toISOString();
       settings.lastError = "";
@@ -483,96 +532,85 @@ class VideoManager {
     }
   }
 
-  async compressVideo(inputPath, targetSize = 45) {
+  compressVideo(inputPath, filename) {
+    return new Promise((resolve, reject) => {
+      const outputPath = path.join(this.compressedDir, filename);
+      let duration = 0;
+
+      ffmpeg(inputPath)
+        .outputOptions([
+          "-c:v libx264",
+          "-preset ultrafast",
+          "-crf 30",
+          "-vf scale=1280:720",
+          "-b:v 800k",
+          "-maxrate 1000k",
+          "-bufsize 2000k",
+          "-c:a aac",
+          "-b:a 128k",
+          "-ac 2",
+          "-ar 44100",
+          "-threads 0",
+        ])
+        .on("codecData", (data) => {
+          duration = parseInt(data.duration.replace(/:/g, "")) || 0;
+        })
+        .on("progress", (progress) => {
+          const currentProgress =
+            Math.round(
+              (progress.timemark.replace(/:/g, "") / duration) * 100
+            ) || 0;
+          const fps =
+            progress.frames /
+              progress.timemark
+                .split(":")
+                .reduce((acc, time) => 60 * acc + +time, 0) || 0;
+
+          this.uploadProgress = {
+            status: "sıkıştırılıyor",
+            current: currentProgress,
+            total: 100,
+            filename,
+            stage: "sıkıştırma",
+            fps: Math.round(fps),
+            kbps: Math.round(progress.currentKbps),
+          };
+        })
+        .on("end", () => {
+          resolve(outputPath);
+        })
+        .on("error", (err) => {
+          console.error("Sıkıştırma hatası:", err);
+          reject(err);
+        })
+        .save(outputPath);
+    });
+  }
+
+  updateProgress(progress) {
     try {
-      const stats = fs.statSync(inputPath);
-      const fileSizeInMB = stats.size / (1024 * 1024);
-      const outputPath = path.join(
-        this.compressedDir,
-        `compressed_${Date.now()}_${path.basename(inputPath)}`
-      );
+      this.uploadProgress = {
+        ...progress,
+        timestamp: Date.now(),
+      };
 
-      let targetBitrate, scale, preset;
-
-      if (fileSizeInMB > 1024) {
-        targetBitrate = Math.floor((targetSize * 8192) / 30);
-        scale = "854x?";
-        preset = "ultrafast";
-      } else if (fileSizeInMB > 500) {
-        targetBitrate = Math.floor((targetSize * 8192) / 45);
-        scale = "1280x?";
-        preset = "veryfast";
-      } else {
-        targetBitrate = Math.floor((targetSize * 8192) / 60);
-        scale = "1280x?";
-        preset = "veryfast";
-      }
-
-      return new Promise((resolve, reject) => {
-        ffmpeg(inputPath)
-          .videoBitrate(targetBitrate)
-          .videoCodec("libx264")
-          .size(scale)
-          .audioCodec("aac")
-          .audioBitrate("128k")
-          .outputOptions([
-            `-preset ${preset}`,
-            "-crf 28",
-            "-movflags +faststart",
-            "-threads 0",
-            "-tune fastdecode",
-          ])
-          .on("progress", (progress) => {
-            if (progress.percent) {
-              this.store.set("uploadProgress", {
-                status: "sıkıştırılıyor",
-                percent: Math.floor(progress.percent),
-                fileName: path.basename(inputPath),
-                stage: "sıkıştırma",
-                fps: progress.currentFps,
-                kbps: progress.currentKbps,
-                targetSize: `${targetSize}MB`,
-                processedDuration: progress.timemark,
-              });
-            }
-          })
-          .on("end", () => {
-            const compressedSize = fs.statSync(outputPath).size / (1024 * 1024);
-            if (compressedSize > targetSize * 1.5) {
-              fs.unlinkSync(outputPath);
-              this.compressVideo(inputPath, targetSize * 0.7)
-                .then(resolve)
-                .catch(reject);
-            } else {
-              resolve(outputPath);
-            }
-          })
-          .on("error", (err) => {
-            this.store.set("uploadProgress", {
-              status: "hata",
-              percent: 0,
-              fileName: path.basename(inputPath),
-              stage: "sıkıştırma-hata",
-              error: err.message,
-            });
-            reject(new Error("Video sıkıştırma hatası: " + err.message));
-          })
-          .save(outputPath);
-      });
+      this.store.set("uploadProgress", this.uploadProgress);
     } catch (error) {
-      throw new Error("Video sıkıştırma hatası: " + error.message);
+      throw error;
     }
   }
 
   async getUploadProgress() {
-    return (
-      this.store.get("uploadProgress") || {
+    return {
+      success: true,
+      data: this.uploadProgress || {
         status: "beklemede",
-        percent: 0,
-        fileName: "",
+        current: 0,
+        total: 0,
+        filename: "",
         stage: "başlatılmadı",
-      }
-    );
+      },
+    };
   }
 }
 

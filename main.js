@@ -338,12 +338,10 @@ function setupIpcHandlers() {
       const win = BrowserWindow.getFocusedWindow();
       if (win) win.isMaximized() ? win.unmaximize() : win.maximize();
     },
-    "window-close": () => {
+    "window-hide": () => {
       const win = BrowserWindow.getFocusedWindow();
       if (win) {
         win.hide();
-        win.webContents.send("app-closing");
-        setTimeout(() => win.close(), 100);
       }
     },
   };
@@ -407,18 +405,28 @@ function setupIpcHandlers() {
         const storedKey = licenseManager.store.get("currentLicense");
 
         if (!storedKey) {
-          return null;
+          return { success: false, message: "Kayıtlı lisans bulunamadı" };
         }
 
         const result = await licenseManager.validateLicense(storedKey);
 
-        if (!result.valid) {
-          return null;
+        if (!result.success) {
+          return {
+            success: false,
+            message: result.message || "Lisans doğrulanamadı",
+          };
         }
 
-        return result.license;
+        return {
+          success: true,
+          data: result.data,
+        };
       } catch (error) {
-        return null;
+        console.error("Lisans kontrol hatası:", error);
+        return {
+          success: false,
+          message: error.message || "Lisans kontrolü sırasında bir hata oluştu",
+        };
       }
     },
     "create-license": async (_, type, months, customKey) => {
@@ -450,12 +458,29 @@ function setupIpcHandlers() {
     },
     "store-license": async (_, key) => {
       try {
-        const result = await licenseManager.storeLicense(key);
-        return result.success
-          ? { success: true }
-          : { success: false, message: result.message };
+        await licenseManager.initStore();
+
+        const validationResult = await licenseManager.validateLicense(key);
+
+        if (!validationResult.success) {
+          return {
+            success: false,
+            message: validationResult.message || "Lisans doğrulanamadı",
+          };
+        }
+
+        licenseManager.store.set("currentLicense", key);
+
+        return {
+          success: true,
+          message: "Lisans başarıyla kaydedildi",
+        };
       } catch (error) {
-        return { success: false, error: error.message };
+        console.error("Lisans kaydetme hatası:", error);
+        return {
+          success: false,
+          message: error.message || "Lisans kaydedilirken bir hata oluştu",
+        };
       }
     },
     "login-with-session": async () => {
@@ -580,7 +605,12 @@ function setupIpcHandlers() {
 
   const videoHandlers = {
     "save-video": async (_, data) => {
-      return await videoManager.saveVideo(data);
+      try {
+        const result = await videoManager.saveVideo(data);
+        return result;
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
     },
     "save-scheduler-times": async (_, times) => {
       try {
@@ -661,18 +691,7 @@ function setupIpcHandlers() {
     "start-invite": async (_, targetGroup, members, limit) => {
       try {
         await inviteManager.loginWithSessions();
-        const result = await inviteManager.inviteUsers(
-          targetGroup,
-          members,
-          limit
-        );
-
-        mainWindow.webContents.send("invite-progress", {
-          success: result.success,
-          finished: true,
-          message: result.message,
-        });
-
+        await inviteManager.inviteUsers(targetGroup, members, limit);
         return { success: true };
       } catch (error) {
         return { success: false, message: error.message };
@@ -681,13 +700,6 @@ function setupIpcHandlers() {
     "stop-invite": async () => {
       try {
         inviteManager.stopInviteSystem();
-
-        mainWindow.webContents.send("invite-progress", {
-          success: true,
-          finished: true,
-          message: "Davet işlemi durduruldu",
-        });
-
         return { success: true };
       } catch (error) {
         return { success: false, message: error.message };
@@ -695,7 +707,12 @@ function setupIpcHandlers() {
     },
     "get-invite-progress": async () => {
       try {
-        return inviteManager.inviteSystem.progress;
+        return {
+          success: inviteManager.inviteSystem.progress.success,
+          fail: inviteManager.inviteSystem.progress.fail,
+          finished: !inviteManager.inviteSystem.isActive,
+          message: inviteManager.inviteSystem.message || "",
+        };
       } catch (error) {
         return null;
       }
@@ -747,7 +764,7 @@ function setupIpcHandlers() {
         return { success: false, error: error.message };
       }
     },
-    "check-session": async () => {
+    "check-sessions": async () => {
       try {
         const sessionImporter = new SessionImporter();
         const sessions = await sessionManager.getSessions();
@@ -894,7 +911,6 @@ if (!gotTheLock) {
     try {
       splashWindow = createSplashWindow();
 
-      // Önce güncelleme kontrolü yap
       if (!isDev) {
         splashWindow.webContents.send(
           "update-status",
@@ -904,7 +920,6 @@ if (!gotTheLock) {
         await autoUpdater.checkForUpdates();
       }
 
-      // Sonra veritabanı bağlantısı
       splashWindow.webContents.send(
         "update-status",
         "Veritabanına bağlanılıyor..."
@@ -934,4 +949,5 @@ app.on("before-quit", () => {
   if (tray) {
     tray.destroy();
   }
+  app.isQuitting = true;
 });

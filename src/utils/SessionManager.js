@@ -53,24 +53,33 @@ class SessionManager {
     const updatedSession = getSessions.map((session) =>
       session.sessionId === sessionId ? { ...session, ...data } : session
     );
+
     this.store.set("sessions", updatedSession);
   }
 
   async addSession(sessionId, data) {
     const getSessions = await this.getSessions();
 
-    if (getSessions.some((session) => session === sessionId)) {
+    const isDuplicate = getSessions.some(
+      (session) =>
+        session.sessionId === sessionId ||
+        session.phoneNumber === data.phoneNumber
+    );
+
+    if (isDuplicate) {
       return {
         success: false,
-        error: "Bu session zaten ekli",
-      };
-    } else {
-      this.store.set("sessions", [...getSessions, data]);
-      return {
-        success: true,
-        sessions: [...getSessions, data],
+        error: "Bu session veya telefon numarası zaten ekli",
       };
     }
+
+    const updatedSessions = [...getSessions, data];
+    this.store.set("sessions", updatedSessions);
+
+    return {
+      success: true,
+      sessions: updatedSessions,
+    };
   }
 
   async deleteSession(sessionId) {
@@ -96,11 +105,26 @@ class SessionManager {
   async loginWithSessions() {
     try {
       if (this.loggedInSessions.length > 0) {
-        return {
-          success: true,
-          sessionCount: this.loggedInSessions.length,
-          message: "Sessionlar zaten aktif",
-        };
+        const allConnected = await Promise.all(
+          this.loggedInSessions.map(async (session) => {
+            try {
+              await session.client.getMe();
+              return true;
+            } catch {
+              return false;
+            }
+          })
+        );
+
+        if (allConnected.every((connected) => connected)) {
+          return {
+            success: true,
+            sessionCount: this.loggedInSessions.length,
+            message: "Sessionlar zaten aktif",
+          };
+        }
+
+        await this.disconnectAll();
       }
 
       const sessions = await this.getSessions();
@@ -158,7 +182,14 @@ class SessionManager {
     try {
       for (const session of this.loggedInSessions) {
         try {
-          await session.client.disconnect();
+          await Promise.race([
+            session.client.disconnect(),
+            new Promise((resolve) => setTimeout(resolve, 5000)),
+          ]);
+
+          if (session.client.destroy) {
+            await session.client.destroy();
+          }
         } catch (error) {
           throw error;
         }

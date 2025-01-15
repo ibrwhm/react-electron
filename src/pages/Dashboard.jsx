@@ -3,6 +3,7 @@ import { format, differenceInDays, isValid } from "date-fns";
 import { tr } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
 import { BsShieldCheck } from "react-icons/bs";
+import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 
 const Dashboard = () => {
@@ -184,10 +185,17 @@ const Dashboard = () => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-telegram-dark">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-telegram-dark via-[#1c2c3e] to-telegram-darker">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-telegram-primary mx-auto"></div>
-          <p className="text-telegram-secondary mt-4">Yükleniyor...</p>
+          <div className="w-16 h-16 relative">
+            <div className="w-16 h-16 rounded-full border-4 border-telegram-primary/20 border-t-telegram-primary animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-full bg-telegram-primary/10"></div>
+            </div>
+          </div>
+          <p className="text-telegram-secondary mt-4 font-medium">
+            Yükleniyor...
+          </p>
         </div>
       </div>
     );
@@ -195,242 +203,299 @@ const Dashboard = () => {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-telegram-dark">
-        <div className="text-center p-6 bg-telegram-card rounded-lg">
-          <p className="text-red-500 mb-4">{error}</p>
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-telegram-dark via-[#1c2c3e] to-telegram-darker">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center p-8 bg-telegram-card/80 backdrop-blur-xl rounded-2xl border border-white/10"
+        >
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/10 flex items-center justify-center">
+            <i className="ri-error-warning-line text-3xl text-red-500"></i>
+          </div>
+          <p className="text-red-500 mb-4 font-medium">{error}</p>
           <button
             onClick={loadAllData}
-            className="px-4 py-2 bg-telegram-primary rounded-lg hover:bg-telegram-primary/90 transition-colors"
+            className="px-6 py-3 bg-gradient-to-r from-telegram-primary to-telegram-secondary rounded-xl hover:opacity-90 transition-all duration-200 transform hover:scale-105 focus:scale-95"
           >
             Tekrar Dene
           </button>
-        </div>
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="bg-telegram-card rounded-lg p-6">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="p-6 space-y-6 bg-gradient-to-br from-telegram-dark via-[#1c2c3e] to-telegram-darker min-h-screen"
+    >
+      <motion.div
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.1 }}
+        className="bg-telegram-card/80 backdrop-blur-xl rounded-2xl p-8 border border-white/10"
+      >
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              Hoş Geldiniz! <span className="text-2xl">👋</span>
+            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+              Hoş Geldiniz! <span className="text-3xl">👋</span>
             </h1>
-            <p className="text-telegram-secondary mt-1">
+            <p className="text-telegram-secondary mt-2 text-lg">
               Telegram Manager Dashboard'a hoş geldiniz
             </p>
           </div>
           <div className="text-right">
-            <div className="text-3xl font-bold text-white">
+            <div className="text-4xl font-bold bg-gradient-to-r from-telegram-primary to-telegram-secondary bg-clip-text text-transparent">
               {format(currentTime, "HH:mm:ss")}
             </div>
-            <div className="text-telegram-secondary">
+            <div className="text-telegram-secondary mt-1">
               {format(currentTime, "d MMMM yyyy EEEE", { locale: tr })}
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <StatCard
-          title="Lisans Durumu"
-          icon={<BsShieldCheck className="text-2xl text-telegram-primary" />}
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.2 }}
         >
-          <div className="flex items-center gap-3">
-            <div
-              className={`px-2 py-1 rounded-md text-xs font-medium ${getStatusColor(
-                systemInfo.status
-              )}`}
-            >
-              {getStatusText(systemInfo.status)}
-            </div>
-            <div className="text-xs text-telegram-secondary">
-              {systemInfo.licenseType || "Yükleniyor..."}
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <div className="flex justify-between text-sm mb-1">
-              <span className="text-telegram-secondary">Kalan Süre</span>
-              <span className="text-white">{systemInfo.daysLeft} gün</span>
-            </div>
-            <div className="h-2 bg-telegram-dark rounded-full overflow-hidden">
+          <StatCard
+            title="Lisans Durumu"
+            icon={<BsShieldCheck className="text-2xl text-telegram-primary" />}
+            className="backdrop-blur-xl bg-telegram-card/80 border border-white/10 hover:border-telegram-primary/30 transition-all duration-300"
+          >
+            <div className="flex items-center gap-3">
               <div
-                className={`h-full rounded-full ${
-                  systemInfo.status === "active"
-                    ? "bg-telegram-success"
-                    : systemInfo.status === "warning"
-                    ? "bg-telegram-warning"
-                    : "bg-telegram-error"
-                }`}
-                style={{
-                  width: `${Math.max(
-                    0,
-                    Math.min(
-                      100,
-                      (systemInfo.daysLeft / systemInfo.totalDays) * 100
-                    )
-                  )}%`,
-                }}
-              ></div>
-            </div>
-          </div>
-
-          <div className="mt-4 pt-4 border-t border-telegram-border">
-            <div className="text-sm text-telegram-secondary mb-1">
-              Device ID
-            </div>
-            <div className="font-mono text-sm text-white break-all">
-              {systemInfo.deviceId}
-            </div>
-          </div>
-        </StatCard>
-
-        <StatCard
-          title="Aktif Oturum"
-          icon={<i className="ri-user-line text-2xl text-telegram-primary"></i>}
-        >
-          <div className="space-y-4">
-            <div className="flex items-end justify-between">
-              <div>
-                <div className="text-4xl font-bold text-white">
-                  {systemInfo.sessions}
-                </div>
-                <div className="text-telegram-secondary mt-1">Aktif Oturum</div>
+                className={`px-2 py-1 rounded-md text-xs font-medium ${getStatusColor(
+                  systemInfo.status
+                )}`}
+              >
+                {getStatusText(systemInfo.status)}
               </div>
-              <div className="text-telegram-success text-sm flex items-center gap-1 bg-telegram-success/10 px-3 py-1 rounded-full">
-                <i className="ri-arrow-up-line"></i>
-                Çevrimiçi
+              <div className="text-xs text-telegram-secondary">
+                {systemInfo.licenseType || "Yükleniyor..."}
               </div>
             </div>
 
-            <div className="pt-4 border-t border-telegram-border">
-              <div className="flex justify-between items-center text-sm">
-                <div className="text-telegram-secondary">Oturum Süresi</div>
-                <div className="text-white">{calculateSessionDuration()}</div>
+            <div className="mt-4">
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-telegram-secondary">Kalan Süre</span>
+                <span className="text-white">{systemInfo.daysLeft} gün</span>
               </div>
-            </div>
-          </div>
-        </StatCard>
-
-        <StatCard
-          title="Son Giriş Bilgileri"
-          icon={
-            <i className="ri-login-circle-line text-2xl text-telegram-primary"></i>
-          }
-        >
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <div className="text-sm text-telegram-secondary">
-                Tarih & Saat
-              </div>
-              <div className="text-white">
-                {formatDate(systemInfo.lastLogin)}
-              </div>
-              <div className="text-telegram-primary font-medium">
-                {formatTime(systemInfo.lastLogin)}
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <div className="text-sm text-telegram-secondary">
-                İşletim Sistemi
-              </div>
-              <div className="text-white">{systemInfo.os}</div>
-              <div className="text-telegram-primary font-medium">
-                {systemInfo.region}
+              <div className="h-2 bg-telegram-dark rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${
+                    systemInfo.status === "active"
+                      ? "bg-telegram-success"
+                      : systemInfo.status === "warning"
+                      ? "bg-telegram-warning"
+                      : "bg-telegram-error"
+                  }`}
+                  style={{
+                    width: `${Math.max(
+                      0,
+                      Math.min(
+                        100,
+                        (systemInfo.daysLeft / systemInfo.totalDays) * 100
+                      )
+                    )}%`,
+                  }}
+                ></div>
               </div>
             </div>
 
-            <div className="col-span-2 pt-3 border-t border-telegram-border">
+            <div className="mt-4 pt-4 border-t border-telegram-border">
               <div className="text-sm text-telegram-secondary mb-1">
-                IP Adresi
+                Device ID
               </div>
               <div className="font-mono text-sm text-white break-all">
-                {systemInfo.ipAddress}
+                {systemInfo.deviceId}
               </div>
             </div>
-          </div>
-        </StatCard>
+          </StatCard>
+        </motion.div>
 
-        <StatCard
-          title="Güvenlik Durumu"
-          icon={
-            <i className="ri-shield-check-line text-2xl text-telegram-success"></i>
-          }
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.3 }}
         >
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-telegram-success/10 flex items-center justify-center">
-                <i className="ri-check-line text-2xl text-telegram-success"></i>
+          <StatCard
+            title="Aktif Oturum"
+            icon={
+              <i className="ri-user-line text-2xl text-telegram-primary"></i>
+            }
+            className="backdrop-blur-xl bg-telegram-card/80 border border-white/10 hover:border-telegram-primary/30 transition-all duration-300"
+          >
+            <div className="space-y-4">
+              <div className="flex items-end justify-between">
+                <div>
+                  <div className="text-4xl font-bold text-white">
+                    {systemInfo.sessions}
+                  </div>
+                  <div className="text-telegram-secondary mt-1">
+                    Aktif Oturum
+                  </div>
+                </div>
+                <div className="text-telegram-success text-sm flex items-center gap-1 bg-telegram-success/10 px-3 py-1 rounded-full">
+                  <i className="ri-arrow-up-line"></i>
+                  Çevrimiçi
+                </div>
               </div>
-              <div>
-                <div className="text-white font-medium">Güvenli</div>
-                <div className="text-sm text-telegram-secondary">
-                  Son 30 günde hatalı giriş yok
+
+              <div className="pt-4 border-t border-telegram-border">
+                <div className="flex justify-between items-center text-sm">
+                  <div className="text-telegram-secondary">Oturum Süresi</div>
+                  <div className="text-white">{calculateSessionDuration()}</div>
                 </div>
               </div>
             </div>
+          </StatCard>
+        </motion.div>
 
-            <div className="pt-3 border-t border-telegram-border">
-              <div className="flex justify-between items-center text-sm">
-                <div className="text-telegram-secondary">Son Kontrol</div>
-                <div className="text-white">{format(new Date(), "HH:mm")}</div>
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.4 }}
+        >
+          <StatCard
+            title="Son Giriş Bilgileri"
+            icon={
+              <i className="ri-login-circle-line text-2xl text-telegram-primary"></i>
+            }
+            className="backdrop-blur-xl bg-telegram-card/80 border border-white/10 hover:border-telegram-primary/30 transition-all duration-300"
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <div className="text-sm text-telegram-secondary">
+                  Tarih & Saat
+                </div>
+                <div className="text-white">
+                  {formatDate(systemInfo.lastLogin)}
+                </div>
+                <div className="text-telegram-primary font-medium">
+                  {formatTime(systemInfo.lastLogin)}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <div className="text-sm text-telegram-secondary">
+                  İşletim Sistemi
+                </div>
+                <div className="text-white">{systemInfo.os}</div>
+                <div className="text-telegram-primary font-medium">
+                  {systemInfo.region}
+                </div>
+              </div>
+
+              <div className="col-span-2 pt-3 border-t border-telegram-border">
+                <div className="text-sm text-telegram-secondary mb-1">
+                  IP Adresi
+                </div>
+                <div className="font-mono text-sm text-white break-all">
+                  {systemInfo.ipAddress}
+                </div>
               </div>
             </div>
-          </div>
-        </StatCard>
+          </StatCard>
+        </motion.div>
+
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.5 }}
+        >
+          <StatCard
+            title="Güvenlik Durumu"
+            icon={
+              <i className="ri-shield-check-line text-2xl text-telegram-success"></i>
+            }
+            className="backdrop-blur-xl bg-telegram-card/80 border border-white/10 hover:border-telegram-primary/30 transition-all duration-300"
+          >
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-telegram-success/10 flex items-center justify-center">
+                  <i className="ri-check-line text-2xl text-telegram-success"></i>
+                </div>
+                <div>
+                  <div className="text-white font-medium">Güvenli</div>
+                  <div className="text-sm text-telegram-secondary">
+                    Son 30 günde hatalı giriş yok
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-telegram-border">
+                <div className="flex justify-between items-center text-sm">
+                  <div className="text-telegram-secondary">Son Kontrol</div>
+                  <div className="text-white">
+                    {format(new Date(), "HH:mm")}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </StatCard>
+        </motion.div>
       </div>
 
-      <StatCard
-        title="Sistem Durumu"
-        icon={
-          <i className="ri-download-cloud-line text-2xl text-telegram-primary"></i>
-        }
+      <motion.div
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.6 }}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div
-              className={`w-10 h-10 rounded-full ${
-                systemInfo.updateAvailable
-                  ? "bg-telegram-warning/10"
-                  : "bg-telegram-success/10"
-              } flex items-center justify-center`}
-            >
-              <i
-                className={`${
+        <StatCard
+          title="Sistem Durumu"
+          icon={
+            <i className="ri-download-cloud-line text-2xl text-telegram-primary"></i>
+          }
+          className="backdrop-blur-xl bg-telegram-card/80 border border-white/10 hover:border-telegram-primary/30 transition-all duration-300"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-10 h-10 rounded-full ${
                   systemInfo.updateAvailable
-                    ? "ri-download-line text-telegram-warning"
-                    : "ri-check-line text-telegram-success"
-                } text-xl`}
-              ></i>
-            </div>
-            <div>
-              <div className="text-new-neutral-white">
-                {systemInfo.updateAvailable
-                  ? "Güncelleme Mevcut"
-                  : "Sistem Güncel"}
+                    ? "bg-telegram-warning/10"
+                    : "bg-telegram-success/10"
+                } flex items-center justify-center`}
+              >
+                <i
+                  className={`${
+                    systemInfo.updateAvailable
+                      ? "ri-download-line text-telegram-warning"
+                      : "ri-check-line text-telegram-success"
+                  } text-xl`}
+                ></i>
               </div>
-              <div className="text-sm text-telegram-secondary">
-                v{systemInfo.version} sürümünü kullanıyorsunuz
+              <div>
+                <div className="text-new-neutral-white">
+                  {systemInfo.updateAvailable
+                    ? "Güncelleme Mevcut"
+                    : "Sistem Güncel"}
+                </div>
+                <div className="text-sm text-telegram-secondary">
+                  v{systemInfo.version} sürümünü kullanıyorsunuz
+                </div>
               </div>
             </div>
+            <button
+              onClick={handleUpdate}
+              disabled={!systemInfo.updateAvailable}
+              className={`px-4 py-2 rounded-lg ${
+                systemInfo.updateAvailable
+                  ? "bg-telegram-primary/10 text-telegram-primary hover:bg-telegram-primary/20"
+                  : "bg-telegram-dark text-telegram-secondary cursor-not-allowed"
+              } transition-colors`}
+            >
+              {systemInfo.updateAvailable ? "Güncelle" : "Sistem Güncel"}
+            </button>
           </div>
-          <button
-            onClick={handleUpdate}
-            disabled={!systemInfo.updateAvailable}
-            className={`px-4 py-2 rounded-lg ${
-              systemInfo.updateAvailable
-                ? "bg-telegram-primary/10 text-telegram-primary hover:bg-telegram-primary/20"
-                : "bg-telegram-dark text-telegram-secondary cursor-not-allowed"
-            } transition-colors`}
-          >
-            {systemInfo.updateAvailable ? "Güncelle" : "Sistem Güncel"}
-          </button>
-        </div>
-      </StatCard>
-    </div>
+        </StatCard>
+      </motion.div>
+    </motion.div>
   );
 };
 

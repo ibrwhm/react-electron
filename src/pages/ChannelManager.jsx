@@ -1,7 +1,25 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
-import { HiUserGroup, HiOutlineLogout, HiOutlineX } from "react-icons/hi";
 import { Input } from "@/components/ui/input";
+import { motion } from "framer-motion";
+import {
+  HiUserGroup,
+  HiOutlineLogout,
+  HiOutlineX,
+  HiOutlineLightningBolt,
+  HiOutlineUsers,
+  HiOutlineChartBar,
+  HiOutlineClock,
+} from "react-icons/hi";
+
+const LoadingSpinner = () => (
+  <div className="flex items-center gap-2">
+    <div className="animate-spin">
+      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+    </div>
+    <span>İşlem yapılıyor...</span>
+  </div>
+);
 
 const ChannelManager = () => {
   const [channelName, setChannelName] = useState("");
@@ -64,160 +82,196 @@ const ChannelManager = () => {
     setLoading(false);
   };
 
-  return (
-    <div className="min-h-screen bg-telegram-dark py-8">
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-white">Kanal İşlemleri</h1>
-          <div className="bg-telegram-card px-4 py-2 rounded-lg border border-telegram-border">
-            <span className="text-sm font-medium text-telegram-secondary">
-              Aktif Oturumlar:
-            </span>
-            <span className="ml-2 text-sm font-semibold text-telegram-primary">
-              {sessionCount}
-            </span>
-          </div>
-        </div>
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        when: "beforeChildren",
+        staggerChildren: 0.1,
+        duration: 0.3,
+      },
+    },
+  };
 
-        <div className="bg-telegram-card rounded-2xl border border-telegram-border overflow-hidden">
-          <div className="p-8">
-            <div className="max-w-2xl mx-auto">
-              <div className="mb-8">
-                <label className="block text-sm font-medium text-telegram-secondary mb-2">
-                  Kanal Adı
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.3 },
+    },
+  };
+
+  return (
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="min-h-screen bg-gradient-to-br from-telegram-dark via-[#1c2c3e] to-telegram-darker py-12 px-4 relative overflow-hidden"
+    >
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-telegram-primary/10 rounded-full blur-3xl transform -translate-y-1/2"></div>
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-telegram-secondary/10 rounded-full blur-3xl transform translate-y-1/2"></div>
+      </div>
+
+      <div className="max-w-4xl mx-auto relative">
+        <motion.div
+          variants={itemVariants}
+          className="flex flex-col md:flex-row items-center justify-between mb-12 gap-6"
+        >
+          <div className="flex items-center space-x-4">
+            <div className="p-3 bg-telegram-primary/20 rounded-2xl">
+              <HiOutlineLightningBolt className="w-8 h-8 text-telegram-primary" />
+            </div>
+            <div>
+              <h1 className="text-4xl font-bold text-white tracking-tight">
+                Kanal İşlemleri
+              </h1>
+              <p className="text-telegram-secondary mt-1">
+                Telegram kanallarınızı yönetin
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <motion.div
+              whileHover={{ scale: 1.02 }}
+              className="bg-telegram-card/30 backdrop-blur-sm px-6 py-4 rounded-2xl border border-telegram-border/30 shadow-lg"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-telegram-primary/20 rounded-lg">
+                  <HiOutlineUsers className="w-5 h-5 text-telegram-primary" />
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-telegram-secondary">
+                    Aktif Oturumlar
+                  </span>
+                  <p className="text-xl font-bold bg-gradient-to-r from-telegram-primary to-telegram-secondary bg-clip-text text-transparent">
+                    {sessionCount}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+
+            <motion.div
+              whileHover={{ scale: 1.02 }}
+              className="bg-telegram-card/30 backdrop-blur-sm px-6 py-4 rounded-2xl border border-telegram-border/30 shadow-lg"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-500/20 rounded-lg">
+                  <HiOutlineChartBar className="w-5 h-5 text-green-500" />
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-telegram-secondary">
+                    İşlem Durumu
+                  </span>
+                  <p className="text-xl font-bold text-green-500">
+                    {loading ? "İşleniyor" : "Hazır"}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </motion.div>
+
+        <motion.div
+          variants={itemVariants}
+          className="bg-telegram-card/20 backdrop-blur-xl rounded-3xl border border-telegram-border/30 shadow-2xl overflow-hidden"
+        >
+          <div className="p-8 md:p-10">
+            <div className="max-w-3xl mx-auto space-y-8">
+              <motion.div variants={itemVariants} className="space-y-3">
+                <label className="block text-base font-semibold text-telegram-secondary">
+                  Kanal Bağlantısı
                 </label>
-                <div className="relative">
+                <div className="relative group">
                   <Input
                     type="text"
                     value={channelName}
                     onChange={(e) => setChannelName(e.target.value)}
-                    className="bg-telegram-input border-telegram-border text-white placeholder:text-telegram-muted focus-visible:ring-telegram-primary"
-                    placeholder="Örn: genel-sohbet"
+                    className="w-full bg-telegram-input/20 backdrop-blur-sm border-telegram-border/30 text-white placeholder:text-telegram-muted focus-visible:ring-telegram-primary text-lg py-6 pl-6 pr-12 rounded-xl shadow-inner transition-all duration-200 group-hover:bg-telegram-input/30"
+                    placeholder="https://t.me/genel_sohbet"
                     disabled={loading}
                   />
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                    <HiUserGroup className="h-5 w-5 text-telegram-muted" />
+                  <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                    <HiUserGroup className="h-6 w-6 text-telegram-muted group-hover:text-telegram-primary transition-colors duration-200" />
                   </div>
                 </div>
-              </div>
+                <p className="text-sm text-telegram-muted mt-2">
+                  Katılmak istediğiniz kanalın bağlantısını girin
+                </p>
+              </motion.div>
 
-              <div className="space-y-4">
-                <button
+              <motion.div variants={itemVariants} className="space-y-4 pt-4">
+                <motion.button
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={handleJoinChannel}
                   disabled={loading}
-                  className="w-full flex items-center justify-center px-6 py-3 rounded-lg text-white bg-telegram-primary hover:bg-telegram-primary-hover transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-center px-8 py-4 rounded-xl text-white bg-gradient-to-r from-telegram-primary to-telegram-primary-hover shadow-lg hover:shadow-telegram-primary/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
                 >
                   {loading ? (
-                    <div className="flex items-center">
-                      <svg
-                        className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        ></circle>
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                      </svg>
-                      İşlem yapılıyor...
-                    </div>
+                    <LoadingSpinner />
                   ) : (
                     <>
-                      <HiUserGroup className="mr-2 h-5 w-5" />
-                      Tüm Oturumları Kanala Katıl
+                      <HiUserGroup className="mr-3 h-6 w-6" />
+                      Tüm Oturumlarla Kanala Katıl
                     </>
                   )}
-                </button>
+                </motion.button>
 
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={handleLeaveChannel}
                   disabled={loading}
-                  className="w-full flex items-center justify-center px-6 py-3 rounded-lg text-white bg-telegram-secondary hover:bg-telegram-hover transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-center px-8 py-4 rounded-xl text-white bg-gradient-to-r from-orange-500 to-orange-600 shadow-lg hover:shadow-orange-500/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
                 >
                   {loading ? (
-                    <div className="flex items-center">
-                      <svg
-                        className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        ></circle>
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                      </svg>
-                      İşlem yapılıyor...
-                    </div>
+                    <LoadingSpinner />
                   ) : (
                     <>
-                      <HiOutlineLogout className="mr-2 h-5 w-5" />
+                      <HiOutlineLogout className="mr-3 h-6 w-6" />
                       Tüm Oturumları Kanaldan Çıkar
                     </>
                   )}
-                </button>
+                </motion.button>
 
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={handleLeaveAllChannels}
                   disabled={loading}
-                  className="w-full flex items-center justify-center px-6 py-3 rounded-lg text-white bg-telegram-error hover:bg-telegram-error-hover transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-center px-8 py-4 rounded-xl text-white bg-gradient-to-r from-red-500 to-red-600 shadow-lg hover:shadow-red-500/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
                 >
                   {loading ? (
-                    <div className="flex items-center">
-                      <svg
-                        className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        ></circle>
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                      </svg>
-                      İşlem yapılıyor...
-                    </div>
+                    <LoadingSpinner />
                   ) : (
                     <>
-                      <HiOutlineX className="mr-2 h-5 w-5" />
+                      <HiOutlineX className="mr-3 h-6 w-6" />
                       Tüm Kanallardan Çık
                     </>
                   )}
-                </button>
-              </div>
+                </motion.button>
+
+                {/* İşlem Durumu */}
+                {loading && (
+                  <div className="bg-telegram-card/30 backdrop-blur-sm p-4 rounded-xl border border-telegram-border/30">
+                    <div className="flex items-center gap-3">
+                      <HiOutlineClock className="w-5 h-5 text-telegram-primary animate-spin" />
+                      <span className="text-telegram-secondary">
+                        İşlem devam ediyor...
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
             </div>
           </div>
-        </div>
+        </motion.div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

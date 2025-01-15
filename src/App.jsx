@@ -1,21 +1,24 @@
-import React, { useState, useEffect, Suspense, lazy } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import toast, { Toaster } from "react-hot-toast";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
+import InviteManager from "./pages/InviteManager";
+import EmojiManager from "./pages/EmojiManager";
+import VideoManager from "./pages/VideoManager";
+import ChannelManager from "./pages/ChannelManager";
+import LicenseManagement from "./pages/LicenseManagement";
+import SessionManager from "./pages/SessionManager";
+import UpdateModal from "./components/UpdateModal";
 
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const InviteManager = lazy(() => import("./pages/InviteManager"));
-const EmojiManager = lazy(() => import("./pages/EmojiManager"));
-const VideoManager = lazy(() => import("./pages/VideoManager"));
-const ChannelManager = lazy(() => import("./pages/ChannelManager"));
-const LicenseManagement = lazy(() => import("./pages/LicenseManagement"));
-const SessionManager = lazy(() => import("./pages/SessionManager"));
-const UpdateModal = lazy(() => import("./components/UpdateModal"));
-
-const LoadingSpinner = () => (
-  <div className="flex items-center justify-center h-full">
-    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+// Merkezi loading spinner bileşeni
+export const LoadingSpinner = () => (
+  <div className="flex items-center justify-center h-screen bg-telegram-dark">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-telegram-primary"></div>
+      <p className="text-telegram-secondary mt-4">Yükleniyor...</p>
+    </div>
   </div>
 );
 
@@ -24,57 +27,41 @@ function AuthCheck({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isLogout, setIsLogout] = useState(false);
   const navigate = useNavigate();
+  const authChecked = useRef(false);
 
   useEffect(() => {
     const checkAuth = async () => {
+      if (authChecked.current || isLogout) {
+        return;
+      }
+
       try {
         setIsLoading(true);
+        authChecked.current = true;
 
-        if (isLogout) {
+        const result = await window.api.getLicense();
+
+        if (result?.success === true && result?.data) {
+          setIsAuthenticated(true);
+          if (window.location.pathname === "/login") {
+            navigate("/dashboard", { replace: true });
+          }
+        } else {
           setIsAuthenticated(false);
-          return;
+          if (window.location.pathname !== "/login") {
+            navigate("/login", { replace: true });
+          }
         }
-
-        const license = await window.api.getLicense();
-
-        if (!license) {
-          throw new Error("Lisans bilgisi alınamadı");
-        }
-
-        if (!license.data) {
-          throw new Error("Lisans verisi bulunamadı");
-        }
-
-        if (!license.data.key) {
-          throw new Error("Lisans anahtarı bulunamadı");
-        }
-
-        if (!license.data.isActive) {
-          throw new Error("Lisans aktif değil");
-        }
-
-        const now = new Date();
-        const expiryDate = new Date(license.data.expiresAt);
-
-        if (isNaN(expiryDate.getTime())) {
-          throw new Error("Geçersiz lisans bitiş tarihi");
-        }
-
-        if (now > expiryDate) {
-          throw new Error("Lisans süresi dolmuş");
-        }
-
-        setIsAuthenticated(true);
       } catch (error) {
+        console.error("Kimlik doğrulama hatası:", error);
         setIsAuthenticated(false);
+
         if (!isLogout) {
           toast.error(error.message || "Kimlik doğrulama hatası");
         }
 
         if (window.location.pathname !== "/login") {
-          setTimeout(() => {
-            navigate("/login", { replace: true });
-          }, 100);
+          navigate("/login", { replace: true });
         }
       } finally {
         setIsLoading(false);
@@ -87,7 +74,9 @@ function AuthCheck({ children }) {
   const handleLogout = async () => {
     try {
       setIsLogout(true);
+      authChecked.current = false;
       await window.api.logout();
+      setIsAuthenticated(false);
       toast.success("Başarıyla çıkış yapıldı");
       navigate("/login", { replace: true });
     } catch (error) {
@@ -96,14 +85,7 @@ function AuthCheck({ children }) {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-telegram-dark">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-telegram-primary"></div>
-          <p className="text-telegram-secondary mt-4">Yükleniyor...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   return children({ isAuthenticated, handleLogout });
@@ -146,62 +128,13 @@ function App() {
               />
               {isAuthenticated ? (
                 <Route element={<Layout onLogout={handleLogout} />}>
-                  <Route
-                    index
-                    element={
-                      <Suspense fallback={<LoadingSpinner />}>
-                        <Dashboard />
-                      </Suspense>
-                    }
-                  />
-                  <Route
-                    path="invites"
-                    element={
-                      <Suspense fallback={<LoadingSpinner />}>
-                        <InviteManager />
-                      </Suspense>
-                    }
-                  />
-                  <Route
-                    path="emojis"
-                    element={
-                      <Suspense fallback={<LoadingSpinner />}>
-                        <EmojiManager />
-                      </Suspense>
-                    }
-                  />
-                  <Route
-                    path="videos"
-                    element={
-                      <Suspense fallback={<LoadingSpinner />}>
-                        <VideoManager />
-                      </Suspense>
-                    }
-                  />
-                  <Route
-                    path="channels"
-                    element={
-                      <Suspense fallback={<LoadingSpinner />}>
-                        <ChannelManager />
-                      </Suspense>
-                    }
-                  />
-                  <Route
-                    path="licenses"
-                    element={
-                      <Suspense fallback={<LoadingSpinner />}>
-                        <LicenseManagement />
-                      </Suspense>
-                    }
-                  />
-                  <Route
-                    path="sessions"
-                    element={
-                      <Suspense fallback={<LoadingSpinner />}>
-                        <SessionManager />
-                      </Suspense>
-                    }
-                  />
+                  <Route index element={<Dashboard />} />
+                  <Route path="invites" element={<InviteManager />} />
+                  <Route path="emojis" element={<EmojiManager />} />
+                  <Route path="videos" element={<VideoManager />} />
+                  <Route path="channels" element={<ChannelManager />} />
+                  <Route path="licenses" element={<LicenseManagement />} />
+                  <Route path="sessions" element={<SessionManager />} />
                 </Route>
               ) : (
                 <Route path="*" element={<Navigate to="/login" replace />} />
@@ -210,9 +143,7 @@ function App() {
           )}
         </AuthCheck>
       </div>
-      <Suspense fallback={<LoadingSpinner />}>
-        <UpdateModal />
-      </Suspense>
+      <UpdateModal />
     </>
   );
 }
