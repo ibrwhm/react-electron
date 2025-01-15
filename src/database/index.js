@@ -21,8 +21,6 @@ const connectionOptions = {
   heartbeatFrequencyMS: 10000,
   retryWrites: true,
   w: "majority",
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
 };
 
 const maxRetries = 2;
