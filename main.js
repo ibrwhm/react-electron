@@ -32,7 +32,7 @@ const SPLASH_PATH = isDev
 
 const ICON_PATH = isDev
   ? path.join(__dirname, "build", "icon.ico")
-  : path.join(process.resourcesPath, "build", "icon.ico");
+  : path.join(process.resourcesPath, "app", "assets", "icon.ico");
 
 let mainWindow = null;
 let tray = null;
@@ -239,6 +239,8 @@ const emojiManager = require("./src/utils/EmojiManager");
 const sessionManager = require("./src/utils/SessionManager");
 const channelManager = require("./src/utils/ChannelManager");
 
+let isCheckingForUpdates = false;
+
 function setupAutoUpdater() {
   if (!isDev) {
     autoUpdater.autoDownload = true;
@@ -251,34 +253,99 @@ function setupAutoUpdater() {
       repo: "react-electron",
       private: false,
     });
+  }
+}
 
-    autoUpdater.on("checking-for-update", () => {
-      log.info("Güncellemeler kontrol ediliyor...");
-      if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.webContents.send(
-          "update-status",
-          "Güncellemeler kontrol ediliyor..."
-        );
-      }
-    });
+async function checkForUpdates() {
+  if (isCheckingForUpdates || isDev) return false;
 
-    autoUpdater.on("update-available", (info) => {
-      log.info("Yeni güncelleme bulundu:", info.version);
-      if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.webContents.send(
-          "update-status",
-          "Güncelleme indiriliyor..."
-        );
-      }
-    });
+  try {
+    isCheckingForUpdates = true;
+    return new Promise((resolve) => {
+      const cleanup = () => {
+        autoUpdater.removeAllListeners("update-not-available");
+        autoUpdater.removeAllListeners("update-downloaded");
+        autoUpdater.removeAllListeners("error");
+        isCheckingForUpdates = false;
+      };
 
-    autoUpdater.on("download-progress", (progressObj) => {
-      const message = `İndiriliyor ${progressObj.percent.toFixed(2)}%`;
-      log.info(message);
-      if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.webContents.send("update-status", message);
-      }
+      autoUpdater.on("checking-for-update", () => {
+        log.info("Güncellemeler kontrol ediliyor...");
+        if (splashWindow && !splashWindow.isDestroyed()) {
+          splashWindow.webContents.send(
+            "update-status",
+            "Güncellemeler kontrol ediliyor..."
+          );
+        }
+      });
+
+      autoUpdater.on("update-not-available", () => {
+        log.info("Güncelleme yok");
+        if (splashWindow && !splashWindow.isDestroyed()) {
+          splashWindow.webContents.send(
+            "update-status",
+            "Güncelleme yok, uygulama başlatılıyor..."
+          );
+        }
+        cleanup();
+        resolve(false);
+      });
+
+      autoUpdater.on("update-available", (info) => {
+        log.info("Yeni güncelleme bulundu:", info.version);
+        if (splashWindow && !splashWindow.isDestroyed()) {
+          splashWindow.webContents.send(
+            "update-status",
+            "Güncelleme indiriliyor..."
+          );
+        }
+      });
+
+      autoUpdater.on("download-progress", (progressObj) => {
+        const message = `İndiriliyor ${progressObj.percent.toFixed(2)}%`;
+        log.info(message);
+        if (splashWindow && !splashWindow.isDestroyed()) {
+          splashWindow.webContents.send("update-status", message);
+        }
+      });
+
+      autoUpdater.on("update-downloaded", () => {
+        log.info("Güncelleme indirildi, yükleniyor...");
+        if (splashWindow && !splashWindow.isDestroyed()) {
+          splashWindow.webContents.send(
+            "update-status",
+            "Güncelleme yükleniyor..."
+          );
+          setTimeout(() => {
+            autoUpdater.quitAndInstall(true, true);
+          }, 2000);
+        }
+        cleanup();
+        resolve(true);
+      });
+
+      autoUpdater.on("error", (error) => {
+        log.error("Güncelleme hatası:", error);
+        if (splashWindow && !splashWindow.isDestroyed()) {
+          splashWindow.webContents.send(
+            "update-status",
+            "Güncelleme hatası, devam ediliyor..."
+          );
+        }
+        cleanup();
+        resolve(false);
+      });
+
+      autoUpdater.checkForUpdates().catch((error) => {
+        log.error("Güncelleme kontrolü hatası:", error);
+        cleanup();
+        resolve(false);
+      });
     });
+  } catch (error) {
+    log.error("checkForUpdates fonksiyonunda hata:", error);
+    isCheckingForUpdates = false;
+    return false;
   }
 }
 
@@ -867,62 +934,13 @@ if (!gotTheLock) {
 
       if (!isDev) {
         setupAutoUpdater();
-        splashWindow.webContents.send(
-          "update-status",
-          "Güncellemeler kontrol ediliyor..."
-        );
-
-        try {
-          // Güncelleme kontrolü için Promise
-          const updateCheck = new Promise((resolve, reject) => {
-            autoUpdater.on("update-not-available", () => {
-              log.info("Güncelleme yok");
-              splashWindow.webContents.send(
-                "update-status",
-                "Güncelleme yok, uygulama başlatılıyor..."
-              );
-              resolve(false);
-            });
-
-            autoUpdater.on("update-downloaded", () => {
-              log.info("Güncelleme indirildi, yükleniyor...");
-              splashWindow.webContents.send(
-                "update-status",
-                "Güncelleme yükleniyor..."
-              );
-              setTimeout(() => {
-                autoUpdater.quitAndInstall(true, true);
-              }, 2000);
-              resolve(true);
-            });
-
-            autoUpdater.on("error", (error) => {
-              log.error("Güncelleme hatası:", error);
-              splashWindow.webContents.send(
-                "update-status",
-                "Güncelleme hatası, devam ediliyor..."
-              );
-              resolve(false);
-            });
-          });
-
-          await autoUpdater.checkForUpdates();
-          const hasUpdate = await updateCheck;
-
-          // Eğer güncelleme varsa, burada dur
-          if (hasUpdate) return;
-        } catch (error) {
-          log.error("Güncelleme kontrolü hatası:", error);
-          splashWindow.webContents.send(
-            "update-status",
-            "Güncelleme kontrolü başarısız, devam ediliyor..."
-          );
-        }
+        const hasUpdate = await checkForUpdates();
+        if (hasUpdate) return;
       }
 
       splashWindow.webContents.send(
         "update-status",
-        "Veritabanına bağlanılıyor..."
+        "MongoDB'ye bağlanılıyor..."
       );
 
       try {
