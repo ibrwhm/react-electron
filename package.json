@@ -73,6 +73,7 @@
     "eslint-plugin-react-refresh": "^0.4.16",
     "globals": "^15.14.0",
     "javascript-obfuscator": "^4.1.1",
+    "png-to-ico": "^2.1.8",
     "postcss": "^8.4.49",
     "rimraf": "^6.0.1",
     "tailwindcss": "^3.4.17",
@@ -91,40 +92,24 @@
       "splash.html",
       "src/**/*",
       "build/**/*",
-      "dist/**/*"
+      "dist/**/*",
+      ".env",
+      "public/**/*"
     ],
     "extraResources": [
       {
         "from": "dist",
-        "to": "dist"
+        "to": "app"
       },
       {
-        "from": "build",
-        "to": "build"
-      },
-      {
-        "from": "preload.js",
-        "to": "preload.js"
-      },
-      {
-        "from": "splash.html",
-        "to": "splash.html"
-      },
-      {
-        "from": "public",
-        "to": "public",
-        "filter": [
-          "**/*"
-        ]
+        "from": "public/assets/icon.png",
+        "to": "build/icon.png"
       }
     ],
     "asarUnpack": [
       "node_modules/sqlite3/**/*",
       "node_modules/electron-store/**/*",
-      "**/node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe",
-      "src/database/**/*",
-      "src/models/**/*",
-      "src/utils/**/*"
+      "**/node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe"
     ],
     "win": {
       "target": [
@@ -135,15 +120,19 @@
           ]
         }
       ],
-      "icon": "build/icon.ico",
+      "icon": "public/assets/icon.png",
       "artifactName": "Telegram.Manager.Setup.${version}.exe",
       "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
+      "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
-      "deleteAppDataOnUninstall": true
+      "deleteAppDataOnUninstall": true,
+      "runAfterFinish": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     },
     "directories": {
       "output": "release",

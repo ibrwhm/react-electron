@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer } = require("electron");
+const path = require("path");
 
-// Geçerli kanalların listesi
+const notificationSoundPath = process.argv
+  .find((arg) => arg.startsWith("--notification-sound-path="))
+  .split("=")[1];
+
 const validChannels = [
   "update-available",
   "update-error",
@@ -125,4 +129,6 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.removeAllListeners(channel);
     }
   },
+
+  getNotificationSoundPath: () => notificationSoundPath,
 });

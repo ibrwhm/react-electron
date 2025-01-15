@@ -30,18 +30,26 @@ export default defineConfig({
     minify: "terser",
     terserOptions: {
       compress: {
-        drop_console: true,
+        drop_console: false,
         drop_debugger: true,
+        pure_funcs: [],
+      },
+      mangle: {
+        toplevel: true,
+        eval: true,
+        properties: false,
+      },
+      format: {
+        comments: false,
       },
     },
-    sourcemap: false,
+    sourcemap: true,
   },
   esbuild: {
-    drop: ["console", "debugger"],
-  },
-  experimental: {
-    renderBuiltUrl(filename) {
-      return "./" + filename;
-    },
+    drop: ["debugger"],
+    minifyIdentifiers: true,
+    minifySyntax: true,
+    minifyWhitespace: true,
+    treeShaking: true,
   },
 });

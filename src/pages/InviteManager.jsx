@@ -94,7 +94,8 @@ const InviteManager = () => {
   }, [systemActive]);
 
   useEffect(() => {
-    const notificationAudio = new Audio("/notification.wav");
+    const soundPath = window.api.getNotificationSoundPath();
+    const notificationAudio = new Audio(soundPath);
     notificationAudio.volume = 0.5;
 
     const handleNotification = () => {

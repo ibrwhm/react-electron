@@ -1,6 +1,15 @@
 const mongoose = require("mongoose");
 const log = require("electron-log");
-require("dotenv").config();
+const path = require("path");
+const { app } = require("electron");
+
+console.log(app.getAppPath());
+
+const envPath = app.isPackaged
+  ? path.join(app.getAppPath(), ".env")
+  : path.join(__dirname, "../../.env");
+
+require("dotenv").config({ path: envPath });
 
 const connectionOptions = {
   serverSelectionTimeoutMS: 5000,
@@ -46,6 +55,11 @@ const connectWithRetry = async () => {
       log.info(
         `MongoDB bağlantısı deneniyor... (Deneme ${retryCount}/${maxRetries})`
       );
+
+      if (!process.env.MONGODB_URI) {
+        throw new Error("MONGODB_URI environment variable is not defined");
+      }
+
       await mongoose.connect(process.env.MONGODB_URI, connectionOptions);
     }
   } catch (error) {

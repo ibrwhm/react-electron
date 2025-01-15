@@ -19,25 +19,20 @@ log.transports.console.level = "debug";
 const isDev = process.env.NODE_ENV === "development";
 const os = require("os");
 
-const envPath = isDev ? ".env" : path.join(process.resourcesPath, ".env");
+const envPath = isDev ? ".env" : path.join(app.getAppPath(), ".env");
 dotenv.config({ path: envPath });
-
-const getAssetPath = (fileName) => {
-  if (isDev) {
-    return path.join(__dirname, "build", fileName);
-  }
-  return path.join(process.resourcesPath, "build", fileName);
-};
 
 const PRELOAD_PATH = isDev
   ? path.join(__dirname, "preload.js")
-  : path.join(process.resourcesPath, "preload.js");
+  : path.join(app.getAppPath(), "preload.js");
 
 const SPLASH_PATH = isDev
   ? path.join(__dirname, "splash.html")
-  : path.join(process.resourcesPath, "splash.html");
+  : path.join(app.getAppPath(), "splash.html");
 
-const ICON_PATH = getAssetPath("icon.png");
+const ICON_PATH = isDev
+  ? path.join(__dirname, "build", "icon.png")
+  : path.join(process.resourcesPath, "build", "icon.png");
 
 let mainWindow = null;
 let tray = null;
@@ -79,13 +74,21 @@ function createWindow() {
       show: false,
       icon: ICON_PATH,
       webPreferences: {
-        nodeIntegration: true,
+        nodeIntegration: false,
         contextIsolation: true,
         enableRemoteModule: true,
         preload: PRELOAD_PATH,
-        webSecurity: true,
+        webSecurity: false,
         backgroundThrottling: false,
         spellcheck: false,
+        sandbox: false,
+        additionalArguments: [
+          `--notification-sound-path=${path.join(
+            process.resourcesPath,
+            "app",
+            "notification.wav"
+          )}`,
+        ],
       },
       backgroundColor: "#1a1b1e",
     });
@@ -106,18 +109,14 @@ function createWindow() {
       mainWindow.webContents.openDevTools();
     } else {
       try {
-        const indexPath = path.join(
-          process.resourcesPath,
-          "dist",
-          "index.html"
-        );
+        const indexPath = path.join(process.resourcesPath, "app", "index.html");
 
         if (!fs.existsSync(indexPath)) {
           log.error("index.html not found at:", indexPath);
           throw new Error("index.html not found");
         }
 
-        mainWindow.loadFile(indexPath, { hash: "/" }).catch((err) => {
+        mainWindow.loadFile(indexPath).catch((err) => {
           log.error("Error loading index.html:", err);
           mainWindow.webContents.openDevTools();
         });
