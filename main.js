@@ -239,11 +239,9 @@ const emojiManager = require("./src/utils/EmojiManager");
 const sessionManager = require("./src/utils/SessionManager");
 const channelManager = require("./src/utils/ChannelManager");
 
-let isCheckingForUpdates = false;
-
 function setupAutoUpdater() {
   if (!isDev) {
-    autoUpdater.autoDownload = true;
+    autoUpdater.autoDownload = false;
     autoUpdater.allowDowngrade = false;
     autoUpdater.allowPrerelease = false;
 
@@ -253,99 +251,37 @@ function setupAutoUpdater() {
       repo: "react-electron",
       private: false,
     });
-  }
-}
 
-async function checkForUpdates() {
-  if (isCheckingForUpdates || isDev) return false;
-
-  try {
-    isCheckingForUpdates = true;
-    return new Promise((resolve) => {
-      const cleanup = () => {
-        autoUpdater.removeAllListeners("update-not-available");
-        autoUpdater.removeAllListeners("update-downloaded");
-        autoUpdater.removeAllListeners("error");
-        isCheckingForUpdates = false;
-      };
-
-      autoUpdater.on("checking-for-update", () => {
-        log.info("Güncellemeler kontrol ediliyor...");
-        if (splashWindow && !splashWindow.isDestroyed()) {
-          splashWindow.webContents.send(
-            "update-status",
-            "Güncellemeler kontrol ediliyor..."
-          );
-        }
-      });
-
-      autoUpdater.on("update-not-available", () => {
-        log.info("Güncelleme yok");
-        if (splashWindow && !splashWindow.isDestroyed()) {
-          splashWindow.webContents.send(
-            "update-status",
-            "Güncelleme yok, uygulama başlatılıyor..."
-          );
-        }
-        cleanup();
-        resolve(false);
-      });
-
-      autoUpdater.on("update-available", (info) => {
-        log.info("Yeni güncelleme bulundu:", info.version);
-        if (splashWindow && !splashWindow.isDestroyed()) {
-          splashWindow.webContents.send(
-            "update-status",
-            "Güncelleme indiriliyor..."
-          );
-        }
-      });
-
-      autoUpdater.on("download-progress", (progressObj) => {
-        const message = `İndiriliyor ${progressObj.percent.toFixed(2)}%`;
-        log.info(message);
-        if (splashWindow && !splashWindow.isDestroyed()) {
-          splashWindow.webContents.send("update-status", message);
-        }
-      });
-
-      autoUpdater.on("update-downloaded", () => {
-        log.info("Güncelleme indirildi, yükleniyor...");
-        if (splashWindow && !splashWindow.isDestroyed()) {
-          splashWindow.webContents.send(
-            "update-status",
-            "Güncelleme yükleniyor..."
-          );
-          setTimeout(() => {
-            autoUpdater.quitAndInstall(true, true);
-          }, 2000);
-        }
-        cleanup();
-        resolve(true);
-      });
-
-      autoUpdater.on("error", (error) => {
-        log.error("Güncelleme hatası:", error);
-        if (splashWindow && !splashWindow.isDestroyed()) {
-          splashWindow.webContents.send(
-            "update-status",
-            "Güncelleme hatası, devam ediliyor..."
-          );
-        }
-        cleanup();
-        resolve(false);
-      });
-
-      autoUpdater.checkForUpdates().catch((error) => {
-        log.error("Güncelleme kontrolü hatası:", error);
-        cleanup();
-        resolve(false);
-      });
+    autoUpdater.on("checking-for-update", () => {
+      log.info("Checking for updates.");
     });
-  } catch (error) {
-    log.error("checkForUpdates fonksiyonunda hata:", error);
-    isCheckingForUpdates = false;
-    return false;
+
+    autoUpdater.on("update-available", (info) => {
+      log.info("New update found:", info.version);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("update-available", info);
+      }
+    });
+
+    autoUpdater.on("download-progress", (progressObj) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("download-progress", progressObj);
+      }
+    });
+
+    autoUpdater.on("update-downloaded", () => {
+      log.info("Update downloaded.");
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("update-downloaded");
+      }
+    });
+
+    autoUpdater.on("error", (error) => {
+      log.error("Update error:", error);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("update-error", { message: error.message });
+      }
+    });
   }
 }
 
@@ -692,7 +628,7 @@ function setupIpcHandlers() {
       autoUpdater.downloadUpdate();
     },
     "quit-and-install": async () => {
-      autoUpdater.quitAndInstall();
+      autoUpdater.quitAndInstall(true, true);
     },
   };
 
@@ -932,12 +868,6 @@ if (!gotTheLock) {
     try {
       splashWindow = createSplashWindow();
 
-      if (!isDev) {
-        setupAutoUpdater();
-        const hasUpdate = await checkForUpdates();
-        if (hasUpdate) return;
-      }
-
       splashWindow.webContents.send(
         "update-status",
         "MongoDB'ye bağlanılıyor..."
@@ -964,12 +894,21 @@ if (!gotTheLock) {
       createTray();
       setupIpcHandlers();
 
+      if (!isDev) {
+        setupAutoUpdater();
+      }
+
       setTimeout(() => {
         if (splashWindow && !splashWindow.isDestroyed()) {
           splashWindow.destroy();
         }
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.show();
+          if (!isDev) {
+            autoUpdater.checkForUpdates().catch((error) => {
+              log.error("Güncelleme kontrolü hatası:", error);
+            });
+          }
         }
       }, 1000);
     } catch (error) {

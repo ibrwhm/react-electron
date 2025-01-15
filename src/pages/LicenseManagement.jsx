@@ -9,15 +9,6 @@ const LicenseManagement = () => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const LoadingSpinner = () => (
-    <div className="flex items-center gap-2">
-      <div className="animate-spin">
-        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
-      </div>
-      <span>İşlem yapılıyor...</span>
-    </div>
-  );
-
   useEffect(() => {
     loadLicenses();
   }, []);

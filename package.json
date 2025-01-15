@@ -1,7 +1,7 @@
 {
   "name": "telegram-manager",
   "productName": "Telegram Manager",
-  "version": "1.0.43",
+  "version": "1.1.0",
   "description": "Telegram Manager",
   "author": {
     "name": "Rio",
@@ -128,10 +128,12 @@
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": true,
       "runAfterFinish": false,
-      "createDesktopShortcut": true,
+      "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
+      "shortcutName": "Telegram Manager",
       "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico"
+      "uninstallerIcon": "build/icon.ico",
+      "include": "installer.nsh"
     },
     "directories": {
       "output": "release",
