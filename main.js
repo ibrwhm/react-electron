@@ -241,7 +241,7 @@ const channelManager = require("./src/utils/ChannelManager");
 
 function setupAutoUpdater() {
   if (!isDev) {
-    autoUpdater.autoDownload = true;
+    autoUpdater.autoDownload = false;
     autoUpdater.allowDowngrade = false;
     autoUpdater.allowPrerelease = false;
 
@@ -269,26 +269,36 @@ function setupAutoUpdater() {
           "update-status",
           "Güncelleme indiriliyor..."
         );
+        autoUpdater.downloadUpdate().catch((err) => {
+          log.error("Güncelleme indirme hatası:", err);
+          if (splashWindow && !splashWindow.isDestroyed()) {
+            splashWindow.webContents.send(
+              "update-status",
+              "Güncelleme indirilemedi: " + err.message
+            );
+            setTimeout(() => {
+              splashWindow.destroy();
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.show();
+              }
+            }, 2000);
+          }
+        });
       }
-      autoUpdater.downloadUpdate().catch((err) => {
-        log.error("Güncelleme indirme hatası:", err);
-        if (splashWindow && !splashWindow.isDestroyed()) {
-          splashWindow.destroy();
-        }
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.show();
-        }
-      });
     });
 
     autoUpdater.on("update-not-available", () => {
       log.info("Güncelleme yok");
       if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.webContents.send(
+          "update-status",
+          "Güncelleme yok, uygulama başlatılıyor..."
+        );
         setTimeout(() => {
-          splashWindow.destroy();
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.show();
-          }
+          splashWindow.webContents.send(
+            "update-status",
+            "MongoDB'ye bağlanılıyor..."
+          );
         }, 1000);
       }
     });
@@ -296,25 +306,29 @@ function setupAutoUpdater() {
     autoUpdater.on("error", (error) => {
       log.error("Güncelleme hatası:", error);
       if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.webContents.send(
+          "update-status",
+          "Güncelleme hatası: " + error.message
+        );
         setTimeout(() => {
-          splashWindow.destroy();
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.show();
-          }
-        }, 1000);
+          splashWindow.webContents.send(
+            "update-status",
+            "MongoDB'ye bağlanılıyor..."
+          );
+        }, 2000);
       }
     });
 
     autoUpdater.on("download-progress", (progressObj) => {
+      const message = `İndiriliyor ${progressObj.percent.toFixed(2)}%`;
+      log.info(message);
       if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.webContents.send(
-          "update-status",
-          `İndiriliyor... ${progressObj.percent.toFixed(2)}%`
-        );
+        splashWindow.webContents.send("update-status", message);
       }
     });
 
     autoUpdater.on("update-downloaded", () => {
+      log.info("Güncelleme indirildi");
       if (splashWindow && !splashWindow.isDestroyed()) {
         splashWindow.webContents.send(
           "update-status",
@@ -912,12 +926,20 @@ if (!gotTheLock) {
       splashWindow = createSplashWindow();
 
       if (!isDev) {
+        setupAutoUpdater();
         splashWindow.webContents.send(
           "update-status",
           "Güncellemeler kontrol ediliyor..."
         );
-        setupAutoUpdater();
-        await autoUpdater.checkForUpdates();
+        try {
+          await autoUpdater.checkForUpdates();
+        } catch (error) {
+          log.error("Güncelleme kontrolü hatası:", error);
+          splashWindow.webContents.send(
+            "update-status",
+            "Güncelleme kontrolü başarısız, devam ediliyor..."
+          );
+        }
       }
 
       splashWindow.webContents.send(
