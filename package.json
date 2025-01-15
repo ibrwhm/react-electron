@@ -1,7 +1,7 @@
 {
   "name": "telegram-manager",
   "productName": "Telegram Manager",
-  "version": "1.0.39",
+  "version": "1.0.41",
   "description": "Telegram Manager",
   "author": {
     "name": "Rio",
@@ -20,6 +20,7 @@
     "preview": "vite preview",
     "start": "cross-env NODE_ENV=development concurrently \"npm run dev\" \"electron .\"",
     "electron:build": "electron-builder",
+    "convert-icon": "node scripts/convert-icon.js",
     "pack": "rimraf release && npm run build && cross-env NODE_ENV=production electron-builder build --win",
     "postinstall": "electron-builder install-app-deps"
   },
@@ -100,10 +101,6 @@
       {
         "from": "dist",
         "to": "app"
-      },
-      {
-        "from": "public/assets/icon.png",
-        "to": "build/icon.png"
       }
     ],
     "asarUnpack": [
@@ -120,7 +117,7 @@
           ]
         }
       ],
-      "icon": "public/assets/icon.png",
+      "icon": "build/icon.ico",
       "artifactName": "Telegram.Manager.Setup.${version}.exe",
       "signAndEditExecutable": false
     },
@@ -132,7 +129,9 @@
       "deleteAppDataOnUninstall": true,
       "runAfterFinish": false,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
     },
     "directories": {
       "output": "release",

@@ -3,7 +3,7 @@ import { IoClose } from "react-icons/io5";
 import { VscChromeMinimize } from "react-icons/vsc";
 import { BiWindowAlt } from "react-icons/bi";
 import { motion } from "framer-motion";
-import appIcon from "@/assets/icon.png";
+import appIcon from "@/assets/icon.ico";
 
 const TitleBar = () => {
   const [isMaximized, setIsMaximized] = useState(false);

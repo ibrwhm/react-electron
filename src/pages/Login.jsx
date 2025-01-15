@@ -3,9 +3,8 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import TitleBar from "@/components/TitleBar";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import appIcon from "@/assets/icon.png";
+import appIcon from "@/assets/icon.ico";
 import { motion } from "framer-motion";
 import { HiKey, HiLockClosed } from "react-icons/hi";
 
